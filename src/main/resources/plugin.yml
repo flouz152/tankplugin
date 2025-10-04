@@ -1,0 +1,8 @@
+name: TankPlugin
+main: com.flouz.tank.TankPlugin
+version: 1.0.0
+api-version: 1.16
+commands:
+  flouz1:
+    description: Tank equipment and utilities
+    usage: /flouz1
