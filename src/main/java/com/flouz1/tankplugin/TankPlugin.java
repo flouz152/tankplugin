@@ -1,5 +1,7 @@
 package com.flouz1.tankplugin;
 
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -8,6 +10,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.logging.Level;
 
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
@@ -22,12 +25,14 @@ import org.bukkit.entity.ArmorStand;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.EntityType;
 import org.bukkit.entity.Player;
+import org.bukkit.event.Event;
 import org.bukkit.event.EventHandler;
+import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.Action;
+import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryCloseEvent;
 import org.bukkit.event.inventory.InventoryOpenEvent;
-import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.player.PlayerInteractAtEntityEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.player.PlayerItemHeldEvent;
@@ -38,6 +43,7 @@ import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.PlayerInventory;
 import org.bukkit.inventory.meta.ItemMeta;
+import org.bukkit.plugin.EventExecutor;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.potion.PotionEffect;
 import org.bukkit.potion.PotionEffectType;
@@ -46,7 +52,6 @@ import org.bukkit.scheduler.BukkitTask;
 import org.bukkit.util.Vector;
 
 import com.destroystokyo.paper.event.player.PlayerArmorChangeEvent;
-import com.destroystokyo.paper.event.player.PlayerSteerVehicleEvent;
 
 public class TankPlugin extends JavaPlugin implements Listener, TabCompleter {
 
@@ -135,6 +140,7 @@ public class TankPlugin extends JavaPlugin implements Listener, TabCompleter {
         if (getCommand("flouz1") != null) {
             getCommand("flouz1").setTabCompleter(this);
         }
+        registerSteerListener();
         effectTask = Bukkit.getScheduler().runTaskTimer(this, this::updateEffects, 1L, 1L);
     }
 
@@ -452,23 +458,64 @@ public class TankPlugin extends JavaPlugin implements Listener, TabCompleter {
         }
     }
 
-    @EventHandler
-    public void onPlayerSteer(PlayerSteerVehicleEvent event) {
-        Player player = event.getPlayer();
-        Helicopter helicopter = helicopters.get(player.getUniqueId());
-        if (helicopter == null || !helicopter.isDriver(player)) {
+    private void registerSteerListener() {
+        final Class<? extends Event> steerClass;
+        final Method getPlayerMethod;
+        final Method getForwardMethod;
+        final Method getSidewaysMethod;
+        final Method isJumpingMethod;
+        final Method isSneakingMethod;
+        final Method setCancelledMethod;
+
+        try {
+            Class<?> rawClass = Class.forName("com.destroystokyo.paper.event.player.PlayerSteerVehicleEvent");
+            steerClass = rawClass.asSubclass(Event.class);
+            getPlayerMethod = rawClass.getMethod("getPlayer");
+            getForwardMethod = rawClass.getMethod("getForward");
+            getSidewaysMethod = rawClass.getMethod("getSideways");
+            isJumpingMethod = rawClass.getMethod("isJumping");
+            isSneakingMethod = rawClass.getMethod("isSneaking");
+            setCancelledMethod = rawClass.getMethod("setCancelled", boolean.class);
+        } catch (ClassNotFoundException ex) {
+            getLogger().warning("PlayerSteerVehicleEvent не найден в API — управление вертолётом будет ограничено.");
+            return;
+        } catch (NoSuchMethodException ex) {
+            getLogger().log(Level.WARNING, "Не удалось подготовить обработчик управления вертолётом.", ex);
             return;
         }
 
-        ControlState state = controlStates.computeIfAbsent(player.getUniqueId(), ignored -> new ControlState());
-        float forward = event.getForward();
-        float sideways = event.getSideways();
-        state.forward = forward > 0.01F;
-        state.turnLeft = sideways < -0.01F;
-        state.turnRight = sideways > 0.01F;
-        state.up = event.isJumping();
-        state.down = forward < -0.01F || event.isSneaking();
-        event.setCancelled(true);
+        EventExecutor executor = (listener, event) -> {
+            if (!steerClass.isInstance(event)) {
+                return;
+            }
+            handleSteerEvent(event, getPlayerMethod, getForwardMethod, getSidewaysMethod, isJumpingMethod,
+                    isSneakingMethod, setCancelledMethod);
+        };
+
+        Bukkit.getPluginManager().registerEvent(steerClass, this, EventPriority.NORMAL, executor, this);
+    }
+
+    private void handleSteerEvent(Object event, Method getPlayerMethod, Method getForwardMethod, Method getSidewaysMethod,
+            Method isJumpingMethod, Method isSneakingMethod, Method setCancelledMethod) {
+        try {
+            Player player = (Player) getPlayerMethod.invoke(event);
+            Helicopter helicopter = helicopters.get(player.getUniqueId());
+            if (helicopter == null || !helicopter.isDriver(player)) {
+                return;
+            }
+
+            ControlState state = controlStates.computeIfAbsent(player.getUniqueId(), ignored -> new ControlState());
+            float forward = ((Number) getForwardMethod.invoke(event)).floatValue();
+            float sideways = ((Number) getSidewaysMethod.invoke(event)).floatValue();
+            state.forward = forward > 0.01F;
+            state.turnLeft = sideways < -0.01F;
+            state.turnRight = sideways > 0.01F;
+            state.up = (boolean) isJumpingMethod.invoke(event);
+            state.down = forward < -0.01F || (boolean) isSneakingMethod.invoke(event);
+            setCancelledMethod.invoke(event, true);
+        } catch (IllegalAccessException | InvocationTargetException ex) {
+            getLogger().log(Level.WARNING, "Ошибка обработки управления вертолётом.", ex);
+        }
     }
 
     private void updateEffects() {
