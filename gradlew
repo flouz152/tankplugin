@@ -114,7 +114,26 @@ case "$( uname )" in                #(
   NONSTOP* )        nonstop=true ;;
 esac
 
-CLASSPATH="\\\"\\\""
+WRAPPER_JAR="$APP_HOME/gradle/wrapper/gradle-wrapper.jar"
+if [ ! -f "$WRAPPER_JAR" ]; then
+    mkdir -p "$( dirname "$WRAPPER_JAR" )"
+    WRAPPER_URLS="https://repo1.maven.org/maven2/org/gradle/wrapper/gradle-wrapper/8.8/gradle-wrapper-8.8.jar https://repo.gradle.org/gradle/libs-releases-local/org/gradle/wrapper/gradle-wrapper/8.8/gradle-wrapper-8.8.jar https://github.com/gradle/gradle/raw/v8.8.0/gradle/wrapper/gradle-wrapper.jar"
+    for WRAPPER_URL in $WRAPPER_URLS; do
+        if command -v curl >/dev/null 2>&1; then
+            curl --fail --location --output "$WRAPPER_JAR" "$WRAPPER_URL" && break
+            rm -f "$WRAPPER_JAR"
+        elif command -v wget >/dev/null 2>&1; then
+            wget --quiet --output-document="$WRAPPER_JAR" "$WRAPPER_URL" && break
+            rm -f "$WRAPPER_JAR"
+        else
+            die "ERROR: Cannot download Gradle wrapper jar. Neither curl nor wget is available."
+        fi
+    done
+    if [ ! -f "$WRAPPER_JAR" ]; then
+        die "ERROR: Failed to download Gradle wrapper jar from the configured sources: $WRAPPER_URLS"
+    fi
+fi
+CLASSPATH="$WRAPPER_JAR"
 
 
 # Determine the Java command to use to start the JVM.

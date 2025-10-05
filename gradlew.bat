@@ -70,7 +70,21 @@ goto fail
 :execute
 @rem Setup the command line
 
-set CLASSPATH=
+set WRAPPER_JAR=%APP_HOME%\gradle\wrapper\gradle-wrapper.jar
+if not exist "%WRAPPER_JAR%" (
+    if not exist "%APP_HOME%\gradle\wrapper" mkdir "%APP_HOME%\gradle\wrapper"
+    set WRAPPER_URLS=https://repo1.maven.org/maven2/org/gradle/wrapper/gradle-wrapper/8.8/gradle-wrapper-8.8.jar https://repo.gradle.org/gradle/libs-releases-local/org/gradle/wrapper/gradle-wrapper/8.8/gradle-wrapper-8.8.jar https://github.com/gradle/gradle/raw/v8.8.0/gradle/wrapper/gradle-wrapper.jar
+    for %%u in (%WRAPPER_URLS%) do (
+        if exist "%WRAPPER_JAR%" goto wrapperReady
+        powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command "try { $ProgressPreference = 'SilentlyContinue'; Invoke-WebRequest '%%u' -OutFile '%WRAPPER_JAR%' -UseBasicParsing } catch { Remove-Item -ErrorAction SilentlyContinue '%WRAPPER_JAR%'; exit 1 }"
+    )
+    if not exist "%WRAPPER_JAR%" (
+        echo ERROR: Failed to download Gradle wrapper jar from the configured sources. 1>&2
+        goto fail
+    )
+)
+:wrapperReady
+set CLASSPATH=%WRAPPER_JAR%
 
 
 @rem Execute Gradle
