@@ -1,7 +1,9 @@
 package com.flouz1.tankplugin;
 
+import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -11,6 +13,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.logging.Level;
 
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
@@ -61,6 +64,10 @@ import org.bukkit.scheduler.BukkitTask;
 import org.bukkit.util.Vector;
 
 import com.destroystokyo.paper.event.player.PlayerArmorChangeEvent;
+
+import io.netty.channel.Channel;
+import io.netty.channel.ChannelDuplexHandler;
+import io.netty.channel.ChannelHandlerContext;
 
 public class TankPlugin extends JavaPlugin implements Listener, TabCompleter {
 
@@ -148,8 +155,20 @@ public class TankPlugin extends JavaPlugin implements Listener, TabCompleter {
     private final Map<UUID, ControlState> controlStates = new ConcurrentHashMap<>();
     private final Map<UUID, WeaponType> projectileTypes = new HashMap<>();
     private final Map<WeaponType, WeaponStats> weaponStats = new EnumMap<>(WeaponType.class);
-    private final Map<UUID, UUID> pendingDoubleCrits = new ConcurrentHashMap<>();
     private double macheteDoubleCritChance = 0.11D;
+    private Method damageCriticalMethod;
+
+    private boolean packetSteerFallback;
+    private Class<?> packetSteerClass;
+    private Method steerForwardMethod;
+    private Method steerSidewaysMethod;
+    private Method steerJumpMethod;
+    private Method steerSneakMethod;
+    private Field steerForwardField;
+    private Field steerSidewaysField;
+    private Field steerJumpField;
+    private Field steerSneakField;
+    private final Map<UUID, String> steerHandlerNames = new ConcurrentHashMap<>();
 
     @Override
     public void onEnable() {
@@ -161,8 +180,11 @@ public class TankPlugin extends JavaPlugin implements Listener, TabCompleter {
         loadWeaponConfig();
         ammoKey = new NamespacedKey(this, "ammo");
         effectTask = Bukkit.getScheduler().runTaskTimer(this, this::updateEffects, 1L, 1L);
+        initCriticalReflection();
         registerSteerListener();
-        registerAttackListener();
+        if (packetSteerFallback) {
+            Bukkit.getScheduler().runTask(this, () -> Bukkit.getOnlinePlayers().forEach(this::injectSteerListener));
+        }
     }
 
     @Override
@@ -173,10 +195,27 @@ public class TankPlugin extends JavaPlugin implements Listener, TabCompleter {
         }
         new HashSet<>(helicopters.keySet()).forEach(this::removeHelicopter);
         seatOwners.clear();
-        pendingDoubleCrits.clear();
+        if (packetSteerFallback) {
+            for (Player player : Bukkit.getOnlinePlayers()) {
+                uninjectSteerListener(player);
+            }
+            steerHandlerNames.clear();
+        }
     }
 
     private void registerSteerListener() {
+        if (tryRegisterPaperSteerListener()) {
+            return;
+        }
+        if (initPacketSteerAccess()) {
+            packetSteerFallback = true;
+            getLogger().info("PlayerSteerVehicleEvent не найден. Используется перехват пакетов для управления вертолётом.");
+        } else {
+            getLogger().severe("Не удалось инициализировать управление вертолёта: PacketPlayInSteerVehicle недоступен.");
+        }
+    }
+
+    private boolean tryRegisterPaperSteerListener() {
         try {
             @SuppressWarnings("unchecked")
             Class<? extends Event> steerClass = (Class<? extends Event>) Class
@@ -210,50 +249,233 @@ public class TankPlugin extends JavaPlugin implements Listener, TabCompleter {
                         cancel.invoke(event, true);
                     }
                 } catch (ReflectiveOperationException ex) {
-                    getLogger().warning("Не удалось обработать управление вертолёта: " + ex.getMessage());
+                    getLogger().log(Level.WARNING, "Не удалось обработать управление вертолёта", ex);
                 }
             };
 
             Bukkit.getPluginManager().registerEvent(steerClass, listener, EventPriority.NORMAL, executor, this, true);
+            return true;
         } catch (ClassNotFoundException ex) {
-            getLogger().warning("PlayerSteerVehicleEvent недоступен. Вертолёт будет ограничен в управлении.");
+            return false;
         } catch (ReflectiveOperationException ex) {
-            getLogger().severe("Не удалось инициализировать управление вертолёта: " + ex.getMessage());
+            getLogger().log(Level.SEVERE, "Не удалось инициализировать управление вертолёта", ex);
+            return false;
         }
     }
 
-    private void registerAttackListener() {
+    private boolean initPacketSteerAccess() {
         try {
-            @SuppressWarnings("unchecked")
-            Class<? extends Event> attackClass = (Class<? extends Event>) Class
-                    .forName("com.destroystokyo.paper.event.player.PlayerAttackEntityEvent");
+            packetSteerClass = getNmsClass("PacketPlayInSteerVehicle",
+                    "net.minecraft.network.protocol.game.PacketPlayInSteerVehicle");
+            if (packetSteerClass == null) {
+                return false;
+            }
 
-            Method getPlayer = attackClass.getMethod("getPlayer");
-            Method getEntity = attackClass.getMethod("getEntity");
-            Method isCritical = attackClass.getMethod("isCritical");
+            steerSidewaysMethod = resolveMethod(packetSteerClass, "a", "getSideways");
+            steerForwardMethod = resolveMethod(packetSteerClass, "b", "getForward");
+            steerJumpMethod = resolveMethod(packetSteerClass, "c", "isJumping", "isJump");
+            steerSneakMethod = resolveMethod(packetSteerClass, "d", "isSneaking", "isDismount", "isSneak");
 
-            Listener listener = new Listener() {
-            };
-            EventExecutor executor = (ignored, event) -> {
-                if (!attackClass.isInstance(event)) {
-                    return;
-                }
-
-                try {
-                    Player player = (Player) getPlayer.invoke(event);
-                    Entity target = (Entity) getEntity.invoke(event);
-                    boolean critical = (Boolean) isCritical.invoke(event);
-                    handlePotentialDoubleCrit(player, target, critical);
-                } catch (ReflectiveOperationException ex) {
-                    getLogger().warning("Не удалось обработать крит мачете: " + ex.getMessage());
-                }
-            };
-
-            Bukkit.getPluginManager().registerEvent(attackClass, listener, EventPriority.MONITOR, executor, this, true);
-        } catch (ClassNotFoundException ex) {
-            getLogger().warning("PlayerAttackEntityEvent недоступен. X2 крит мачете будет ограничен.");
+            steerSidewaysField = resolveField(packetSteerClass, float.class, "a", "sideways");
+            steerForwardField = resolveField(packetSteerClass, float.class, "b", "forward");
+            steerJumpField = resolveField(packetSteerClass, boolean.class, "c", "jumping");
+            steerSneakField = resolveField(packetSteerClass, boolean.class, "d", "dismount", "sneaking");
+            return true;
         } catch (ReflectiveOperationException ex) {
-            getLogger().severe("Не удалось инициализировать обработку критов мачете: " + ex.getMessage());
+            getLogger().log(Level.SEVERE, "Не удалось подготовить пакетное управление вертолёта", ex);
+            return false;
+        }
+    }
+
+    private Class<?> getNmsClass(String legacyName, String modernName) {
+        String serverPackage = Bukkit.getServer().getClass().getPackage().getName();
+        String version = serverPackage.substring(serverPackage.lastIndexOf('.') + 1);
+        List<String> candidates = new ArrayList<>();
+        candidates.add("net.minecraft.server." + version + "." + legacyName);
+        candidates.add(modernName);
+        for (String name : candidates) {
+            try {
+                return Class.forName(name);
+            } catch (ClassNotFoundException ignored) {
+            }
+        }
+        return null;
+    }
+
+    private Method resolveMethod(Class<?> owner, String... names) throws NoSuchMethodException {
+        for (String name : names) {
+            try {
+                Method method = owner.getMethod(name);
+                method.setAccessible(true);
+                return method;
+            } catch (NoSuchMethodException ignored) {
+            }
+        }
+        throw new NoSuchMethodException(Arrays.toString(names));
+    }
+
+    private Field resolveField(Class<?> owner, Class<?> type, String... names) {
+        for (String name : names) {
+            try {
+                Field field = owner.getDeclaredField(name);
+                if (field.getType() == type) {
+                    field.setAccessible(true);
+                    return field;
+                }
+            } catch (NoSuchFieldException ignored) {
+            }
+        }
+        return null;
+    }
+
+    private void injectSteerListener(Player player) {
+        if (!packetSteerFallback || packetSteerClass == null) {
+            return;
+        }
+        UUID uuid = player.getUniqueId();
+        if (steerHandlerNames.containsKey(uuid)) {
+            return;
+        }
+        Channel channel = getPlayerChannel(player);
+        if (channel == null) {
+            return;
+        }
+        String handlerName = "tankplugin_steer_" + uuid;
+        ChannelDuplexHandler handler = new ChannelDuplexHandler() {
+            @Override
+            public void channelRead(ChannelHandlerContext ctx, Object msg) throws Exception {
+                if (packetSteerClass.isInstance(msg)) {
+                    float forward = readFloat(msg, steerForwardMethod, steerForwardField);
+                    float sideways = readFloat(msg, steerSidewaysMethod, steerSidewaysField);
+                    boolean jumping = readBoolean(msg, steerJumpMethod, steerJumpField);
+                    boolean sneaking = readBoolean(msg, steerSneakMethod, steerSneakField);
+
+                    if (handleHelicopterSteer(player, player.getVehicle(), forward, sideways, jumping, sneaking)) {
+                        zeroSteerPacket(msg);
+                    }
+                }
+                super.channelRead(ctx, msg);
+            }
+        };
+
+        channel.eventLoop().execute(() -> {
+            if (channel.pipeline().get(handlerName) == null) {
+                channel.pipeline().addBefore("packet_handler", handlerName, handler);
+                steerHandlerNames.put(uuid, handlerName);
+            }
+        });
+    }
+
+    private void uninjectSteerListener(Player player) {
+        if (!packetSteerFallback) {
+            return;
+        }
+        UUID uuid = player.getUniqueId();
+        String handlerName = steerHandlerNames.remove(uuid);
+        if (handlerName == null) {
+            handlerName = "tankplugin_steer_" + uuid;
+        }
+        Channel channel = getPlayerChannel(player);
+        if (channel == null) {
+            return;
+        }
+        channel.eventLoop().execute(() -> {
+            if (channel.pipeline().get(handlerName) != null) {
+                channel.pipeline().remove(handlerName);
+            }
+        });
+    }
+
+    private Channel getPlayerChannel(Player player) {
+        try {
+            Object craftPlayer = player;
+            Method getHandle = craftPlayer.getClass().getMethod("getHandle");
+            Object entityPlayer = getHandle.invoke(craftPlayer);
+            Field connectionField = entityPlayer.getClass().getField("playerConnection");
+            Object playerConnection = connectionField.get(entityPlayer);
+            Field networkField = playerConnection.getClass().getField("networkManager");
+            Object networkManager = networkField.get(playerConnection);
+            Field channelField = null;
+            Class<?> networkClass = networkManager.getClass();
+            for (Field field : networkClass.getFields()) {
+                if (Channel.class.isAssignableFrom(field.getType())) {
+                    channelField = field;
+                    break;
+                }
+            }
+            if (channelField == null) {
+                channelField = networkClass.getDeclaredField("channel");
+            }
+            channelField.setAccessible(true);
+            return (Channel) channelField.get(networkManager);
+        } catch (ReflectiveOperationException ex) {
+            getLogger().log(Level.WARNING, "Не удалось получить сетевой канал игрока", ex);
+            return null;
+        }
+    }
+
+    private float readFloat(Object packet, Method method, Field field) {
+        try {
+            if (method != null) {
+                return ((Number) method.invoke(packet)).floatValue();
+            }
+        } catch (ReflectiveOperationException ignored) {
+        }
+        if (field != null) {
+            try {
+                return field.getFloat(packet);
+            } catch (IllegalAccessException ignored) {
+            }
+        }
+        return 0F;
+    }
+
+    private boolean readBoolean(Object packet, Method method, Field field) {
+        try {
+            if (method != null) {
+                Object result = method.invoke(packet);
+                if (result instanceof Boolean) {
+                    return (Boolean) result;
+                }
+                if (result instanceof Number) {
+                    return ((Number) result).intValue() != 0;
+                }
+            }
+        } catch (ReflectiveOperationException ignored) {
+        }
+        if (field != null) {
+            try {
+                return field.getBoolean(packet);
+            } catch (IllegalAccessException ignored) {
+            }
+        }
+        return false;
+    }
+
+    private void zeroSteerPacket(Object packet) {
+        trySetFloat(packet, steerForwardField, 0F);
+        trySetFloat(packet, steerSidewaysField, 0F);
+        trySetBoolean(packet, steerJumpField, false);
+        trySetBoolean(packet, steerSneakField, false);
+    }
+
+    private void trySetFloat(Object packet, Field field, float value) {
+        if (field == null) {
+            return;
+        }
+        try {
+            field.setFloat(packet, value);
+        } catch (IllegalAccessException ignored) {
+        }
+    }
+
+    private void trySetBoolean(Object packet, Field field, boolean value) {
+        if (field == null) {
+            return;
+        }
+        try {
+            field.setBoolean(packet, value);
+        } catch (IllegalAccessException ignored) {
         }
     }
 
@@ -267,6 +489,15 @@ public class TankPlugin extends JavaPlugin implements Listener, TabCompleter {
         return null;
     }
 
+    private void initCriticalReflection() {
+        try {
+            damageCriticalMethod = EntityDamageByEntityEvent.class.getMethod("isCritical");
+            damageCriticalMethod.setAccessible(true);
+        } catch (NoSuchMethodException ignored) {
+            damageCriticalMethod = null;
+        }
+    }
+
     private boolean invokeBoolean(Object instance, Method method) {
         if (method == null) {
             return false;
@@ -278,24 +509,6 @@ public class TankPlugin extends JavaPlugin implements Listener, TabCompleter {
             getLogger().warning("Не удалось получить состояние управления вертолётом: " + ex.getMessage());
             return false;
         }
-    }
-
-    private void handlePotentialDoubleCrit(Player attacker, Entity rawTarget, boolean critical) {
-        if (!critical || macheteDoubleCritChance <= 0D) {
-            return;
-        }
-        if (!(rawTarget instanceof Player)) {
-            return;
-        }
-        Player target = (Player) rawTarget;
-        if (!isNamedItem(attacker.getInventory().getItemInMainHand(), Material.DIAMOND_SWORD, SWORD_NAME)) {
-            return;
-        }
-        double roll = ThreadLocalRandom.current().nextDouble();
-        if (roll >= macheteDoubleCritChance) {
-            return;
-        }
-        pendingDoubleCrits.put(attacker.getUniqueId(), target.getUniqueId());
     }
 
     private void loadWeaponConfig() {
@@ -495,15 +708,22 @@ public class TankPlugin extends JavaPlugin implements Listener, TabCompleter {
         updateEffectsFor(player);
         Bukkit.getScheduler().runTask(this, () -> updateEffectsFor(player));
         Bukkit.getScheduler().runTask(this, () -> applyAbsorptionIfWearing(player));
+        if (packetSteerFallback) {
+            Bukkit.getScheduler().runTaskLater(this, () -> injectSteerListener(player), 1L);
+        }
     }
 
     @EventHandler
     public void onPlayerQuit(PlayerQuitEvent event) {
-        activeMedkits.remove(event.getPlayer().getUniqueId());
-        removeHelicopter(event.getPlayer().getUniqueId());
-        MedkitSession session = medkitSessions.remove(event.getPlayer().getUniqueId());
+        Player player = event.getPlayer();
+        activeMedkits.remove(player.getUniqueId());
+        removeHelicopter(player.getUniqueId());
+        MedkitSession session = medkitSessions.remove(player.getUniqueId());
         if (session != null) {
-            session.restore(event.getPlayer());
+            session.restore(player);
+        }
+        if (packetSteerFallback) {
+            uninjectSteerListener(player);
         }
     }
 
@@ -691,22 +911,45 @@ public class TankPlugin extends JavaPlugin implements Listener, TabCompleter {
     }
 
     private void handleMacheteDamage(EntityDamageByEntityEvent event, Player attacker) {
-        UUID attackerId = attacker.getUniqueId();
-        UUID expectedTarget = pendingDoubleCrits.remove(attackerId);
-        if (expectedTarget == null) {
+        if (macheteDoubleCritChance <= 0D) {
             return;
         }
-        Entity victim = event.getEntity();
-        if (!(victim instanceof Player) || !victim.getUniqueId().equals(expectedTarget)) {
+        if (!(event.getEntity() instanceof Player)) {
             return;
         }
         if (!isNamedItem(attacker.getInventory().getItemInMainHand(), Material.DIAMOND_SWORD, SWORD_NAME)) {
+            return;
+        }
+        if (!isCriticalHit(event, attacker)) {
+            return;
+        }
+        if (ThreadLocalRandom.current().nextDouble() >= macheteDoubleCritChance) {
             return;
         }
 
         event.setDamage(event.getDamage() * 2D);
         attacker.addPotionEffect(new PotionEffect(PotionEffectType.INVISIBILITY, 60, 0, false, false, false));
         attacker.sendMessage(ChatColor.DARK_AQUA + "X2 крит активирован! " + ChatColor.GRAY + "Вы невидимы на 3 секунды.");
+    }
+
+    private boolean isCriticalHit(EntityDamageByEntityEvent event, Player attacker) {
+        if (damageCriticalMethod != null) {
+            try {
+                Object result = damageCriticalMethod.invoke(event);
+                if (result instanceof Boolean) {
+                    return (Boolean) result;
+                }
+            } catch (ReflectiveOperationException ignored) {
+                damageCriticalMethod = null;
+            }
+        }
+        return attacker.getAttackCooldown() >= 1F
+                && attacker.getFallDistance() > 0.0F
+                && !attacker.isOnGround()
+                && !attacker.isInsideVehicle()
+                && !attacker.isClimbing()
+                && !attacker.isInWater()
+                && !attacker.hasPotionEffect(PotionEffectType.BLINDNESS);
     }
 
     private void spawnHelicopter(Player player) {
@@ -783,11 +1026,9 @@ public class TankPlugin extends JavaPlugin implements Listener, TabCompleter {
         Entity damager = event.getDamager();
         if (damager instanceof Player) {
             Player player = (Player) damager;
-            if (event.isCancelled()) {
-                pendingDoubleCrits.remove(player.getUniqueId());
-                return;
+            if (!event.isCancelled()) {
+                handleMacheteDamage(event, player);
             }
-            handleMacheteDamage(event, player);
         }
 
         if (event.isCancelled()) {
