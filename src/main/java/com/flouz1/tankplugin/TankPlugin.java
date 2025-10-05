@@ -38,7 +38,6 @@ import org.bukkit.event.entity.EntityDamageByEntityEvent;
 import org.bukkit.event.entity.ProjectileHitEvent;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryCloseEvent;
-import org.bukkit.event.inventory.InventoryOpenEvent;
 import org.bukkit.event.player.PlayerInteractAtEntityEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.player.PlayerItemHeldEvent;
@@ -373,6 +372,7 @@ public class TankPlugin extends JavaPlugin implements Listener, TabCompleter {
         Player player = event.getPlayer();
         updateEffectsFor(player);
         Bukkit.getScheduler().runTask(this, () -> updateEffectsFor(player));
+        Bukkit.getScheduler().runTask(this, () -> applyAbsorptionIfWearing(player));
     }
 
     @EventHandler
@@ -388,13 +388,11 @@ public class TankPlugin extends JavaPlugin implements Listener, TabCompleter {
     @EventHandler
     public void onPlayerItemHeld(PlayerItemHeldEvent event) {
         int newSlot = event.getNewSlot();
-        if (newSlot == 0 || newSlot == 2) {
-            Player player = event.getPlayer();
-            if (isWearingTankLeggings(player)) {
-                applyAbsorption(player);
-            }
+        Player player = event.getPlayer();
+        updateEffectsFor(player);
+        if ((newSlot == 0 || newSlot == 2) && isWearingTankLeggings(player)) {
+            applyAbsorption(player);
         }
-        updateEffectsFor(event.getPlayer());
     }
 
     @EventHandler
@@ -405,23 +403,12 @@ public class TankPlugin extends JavaPlugin implements Listener, TabCompleter {
     }
 
     @EventHandler
-    public void onInventoryOpen(InventoryOpenEvent event) {
-        if (event.getPlayer() instanceof Player) {
-            Player player = (Player) event.getPlayer();
-            updateEffectsFor(player);
-            if (isWearingTankLeggings(player)) {
-                applyAbsorption(player);
-            }
-        }
-    }
-
-    @EventHandler
     public void onInventoryClose(InventoryCloseEvent event) {
         if (event.getPlayer() instanceof Player) {
             Player player = (Player) event.getPlayer();
             updateEffectsFor(player);
             if (isWearingTankLeggings(player)) {
-                applyAbsorption(player);
+                Bukkit.getScheduler().runTask(this, () -> applyAbsorptionIfWearing(player));
             }
         }
     }
@@ -537,9 +524,7 @@ public class TankPlugin extends JavaPlugin implements Listener, TabCompleter {
             removeEffect(player, PotionEffectType.REGENERATION);
         }
 
-        if (isWearingTankLeggings(player)) {
-            applyAbsorption(player);
-        } else {
+        if (!isWearingTankLeggings(player)) {
             removeEffect(player, PotionEffectType.ABSORPTION);
         }
 
@@ -570,6 +555,12 @@ public class TankPlugin extends JavaPlugin implements Listener, TabCompleter {
     private void applyAbsorption(Player player) {
         PotionEffect effect = new PotionEffect(PotionEffectType.ABSORPTION, Integer.MAX_VALUE, 0, true, false, false);
         player.addPotionEffect(effect, true);
+    }
+
+    private void applyAbsorptionIfWearing(Player player) {
+        if (isWearingTankLeggings(player)) {
+            applyAbsorption(player);
+        }
     }
 
     private void removeEffect(Player player, PotionEffectType type) {
