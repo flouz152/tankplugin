@@ -1,5 +1,6 @@
 package com.flouz1.tankplugin;
 
+import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.HashMap;
@@ -27,7 +28,9 @@ import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Player;
 import org.bukkit.entity.Projectile;
 import org.bukkit.entity.Snowball;
+import org.bukkit.event.Event;
 import org.bukkit.event.EventHandler;
+import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.Action;
 import org.bukkit.event.entity.EntityDamageByEntityEvent;
@@ -47,6 +50,7 @@ import org.bukkit.inventory.PlayerInventory;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.persistence.PersistentDataContainer;
 import org.bukkit.persistence.PersistentDataType;
+import org.bukkit.plugin.EventExecutor;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.potion.PotionEffect;
 import org.bukkit.potion.PotionEffectType;
@@ -55,7 +59,6 @@ import org.bukkit.scheduler.BukkitTask;
 import org.bukkit.util.Vector;
 
 import com.destroystokyo.paper.event.player.PlayerArmorChangeEvent;
-import com.destroystokyo.paper.event.player.PlayerSteerVehicleEvent;
 
 public class TankPlugin extends JavaPlugin implements Listener, TabCompleter {
 
@@ -154,6 +157,7 @@ public class TankPlugin extends JavaPlugin implements Listener, TabCompleter {
         loadWeaponConfig();
         ammoKey = new NamespacedKey(this, "ammo");
         effectTask = Bukkit.getScheduler().runTaskTimer(this, this::updateEffects, 1L, 1L);
+        registerSteerListener();
     }
 
     @Override
@@ -164,6 +168,75 @@ public class TankPlugin extends JavaPlugin implements Listener, TabCompleter {
         }
         new HashSet<>(helicopters.keySet()).forEach(this::removeHelicopter);
         seatOwners.clear();
+    }
+
+    private void registerSteerListener() {
+        try {
+            @SuppressWarnings("unchecked")
+            Class<? extends Event> steerClass = (Class<? extends Event>) Class
+                    .forName("com.destroystokyo.paper.event.player.PlayerSteerVehicleEvent");
+
+            Method getPlayer = steerClass.getMethod("getPlayer");
+            Method getVehicle = steerClass.getMethod("getVehicle");
+            Method getForward = steerClass.getMethod("getForward");
+            Method getSideways = steerClass.getMethod("getSideways");
+            Method cancel = steerClass.getMethod("setCancelled", boolean.class);
+
+            Method isJump = findOptionalBooleanAccessor(steerClass, "isJumping", "isJump");
+            Method isSneak = findOptionalBooleanAccessor(steerClass, "isSneaking", "isSneak");
+
+            Listener listener = new Listener() {
+            };
+            EventExecutor executor = (ignored, event) -> {
+                if (!steerClass.isInstance(event)) {
+                    return;
+                }
+
+                try {
+                    Player player = (Player) getPlayer.invoke(event);
+                    Entity vehicle = (Entity) getVehicle.invoke(event);
+                    float forward = ((Number) getForward.invoke(event)).floatValue();
+                    float sideways = ((Number) getSideways.invoke(event)).floatValue();
+                    boolean jumping = invokeBoolean(event, isJump);
+                    boolean sneaking = invokeBoolean(event, isSneak);
+
+                    if (handleHelicopterSteer(player, vehicle, forward, sideways, jumping, sneaking)) {
+                        cancel.invoke(event, true);
+                    }
+                } catch (ReflectiveOperationException ex) {
+                    getLogger().warning("Не удалось обработать управление вертолёта: " + ex.getMessage());
+                }
+            };
+
+            Bukkit.getPluginManager().registerEvent(steerClass, listener, EventPriority.NORMAL, executor, this, true);
+        } catch (ClassNotFoundException ex) {
+            getLogger().warning("PlayerSteerVehicleEvent недоступен. Вертолёт будет ограничен в управлении.");
+        } catch (ReflectiveOperationException ex) {
+            getLogger().severe("Не удалось инициализировать управление вертолёта: " + ex.getMessage());
+        }
+    }
+
+    private Method findOptionalBooleanAccessor(Class<?> type, String... names) {
+        for (String name : names) {
+            try {
+                return type.getMethod(name);
+            } catch (NoSuchMethodException ignored) {
+            }
+        }
+        return null;
+    }
+
+    private boolean invokeBoolean(Object instance, Method method) {
+        if (method == null) {
+            return false;
+        }
+        try {
+            Object result = method.invoke(instance);
+            return result instanceof Boolean ? (Boolean) result : Boolean.TRUE.equals(result);
+        } catch (ReflectiveOperationException ex) {
+            getLogger().warning("Не удалось получить состояние управления вертолётом: " + ex.getMessage());
+            return false;
+        }
     }
 
     private void loadWeaponConfig() {
@@ -451,27 +524,28 @@ public class TankPlugin extends JavaPlugin implements Listener, TabCompleter {
         }
     }
 
-    @EventHandler
-    public void onPlayerSteerVehicle(PlayerSteerVehicleEvent event) {
-        Player player = event.getPlayer();
-        Helicopter helicopter = helicopters.get(player.getUniqueId());
-        if (helicopter == null || !helicopter.isDriver(player)) {
-            return;
+    private boolean handleHelicopterSteer(Player player, Entity vehicle, float forward, float sideways,
+            boolean jumping, boolean sneaking) {
+        if (player == null) {
+            return false;
         }
 
-        Entity vehicle = event.getVehicle();
+        Helicopter helicopter = helicopters.get(player.getUniqueId());
+        if (helicopter == null || !helicopter.isDriver(player)) {
+            return false;
+        }
+
         if (vehicle == null || !vehicle.getUniqueId().equals(helicopter.getSeat().getUniqueId())) {
-            return;
+            return false;
         }
 
         ControlState state = controlStates.computeIfAbsent(player.getUniqueId(), ignored -> new ControlState());
-        state.forward = event.getForward() > 0.01F;
-        state.turnLeft = event.getSideways() < -0.01F;
-        state.turnRight = event.getSideways() > 0.01F;
-        state.up = event.isJumping();
-        state.down = event.getForward() < -0.01F || event.isSneaking();
-
-        event.setCancelled(true);
+        state.forward = forward > 0.01F;
+        state.turnLeft = sideways < -0.01F;
+        state.turnRight = sideways > 0.01F;
+        state.up = jumping;
+        state.down = forward < -0.01F || sneaking;
+        return true;
     }
 
     private void updateEffects() {

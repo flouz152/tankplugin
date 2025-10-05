@@ -6,9 +6,8 @@ group = 'com.flouz1'
 version = '1.0.0'
 
 java {
-    toolchain {
-        languageVersion = JavaLanguageVersion.of(8)
-    }
+    sourceCompatibility = JavaVersion.VERSION_1_8
+    targetCompatibility = JavaVersion.VERSION_1_8
 }
 
 repositories {
@@ -23,5 +22,6 @@ dependencies {
 
 tasks.withType(JavaCompile).configureEach {
     options.encoding = 'UTF-8'
+    options.release = 8
 }
 
