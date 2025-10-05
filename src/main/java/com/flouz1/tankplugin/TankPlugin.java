@@ -340,7 +340,7 @@ public class TankPlugin extends JavaPlugin implements Listener, TabCompleter {
         if (channel == null) {
             return;
         }
-        String handlerName = "tankplugin_steer_" + uuid;
+        final String handlerName = "tankplugin_steer_" + uuid;
         ChannelDuplexHandler handler = new ChannelDuplexHandler() {
             @Override
             public void channelRead(ChannelHandlerContext ctx, Object msg) throws Exception {
@@ -371,10 +371,8 @@ public class TankPlugin extends JavaPlugin implements Listener, TabCompleter {
             return;
         }
         UUID uuid = player.getUniqueId();
-        String handlerName = steerHandlerNames.remove(uuid);
-        if (handlerName == null) {
-            handlerName = "tankplugin_steer_" + uuid;
-        }
+        String existingName = steerHandlerNames.remove(uuid);
+        final String handlerName = existingName != null ? existingName : "tankplugin_steer_" + uuid;
         Channel channel = getPlayerChannel(player);
         if (channel == null) {
             return;
