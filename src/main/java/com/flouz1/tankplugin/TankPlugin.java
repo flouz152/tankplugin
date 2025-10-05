@@ -358,9 +358,10 @@ public class TankPlugin extends JavaPlugin implements Listener, TabCompleter {
             }
         };
 
+        final Channel injectionChannel = channel;
         channel.eventLoop().execute(() -> {
-            if (channel.pipeline().get(handlerName) == null) {
-                channel.pipeline().addBefore("packet_handler", handlerName, handler);
+            if (injectionChannel.pipeline().get(handlerName) == null) {
+                injectionChannel.pipeline().addBefore("packet_handler", handlerName, handler);
                 steerHandlerNames.put(uuid, handlerName);
             }
         });
@@ -377,9 +378,10 @@ public class TankPlugin extends JavaPlugin implements Listener, TabCompleter {
         if (channel == null) {
             return;
         }
+        final Channel removalChannel = channel;
         channel.eventLoop().execute(() -> {
-            if (channel.pipeline().get(handlerName) != null) {
-                channel.pipeline().remove(handlerName);
+            if (removalChannel.pipeline().get(handlerName) != null) {
+                removalChannel.pipeline().remove(handlerName);
             }
         });
     }
