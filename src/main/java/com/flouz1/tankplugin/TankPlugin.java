@@ -947,9 +947,33 @@ public class TankPlugin extends JavaPlugin implements Listener, TabCompleter {
                 && attacker.getFallDistance() > 0.0F
                 && !attacker.isOnGround()
                 && !attacker.isInsideVehicle()
-                && !attacker.isClimbing()
+                && !isClimbing(attacker)
                 && !attacker.isInWater()
                 && !attacker.hasPotionEffect(PotionEffectType.BLINDNESS);
+    }
+
+    private boolean isClimbing(Player player) {
+        Material blockType = player.getLocation().getBlock().getType();
+        if (isClimbable(blockType)) {
+            return true;
+        }
+        Material eyeBlockType = player.getEyeLocation().getBlock().getType();
+        return isClimbable(eyeBlockType);
+    }
+
+    private boolean isClimbable(Material material) {
+        switch (material) {
+            case LADDER:
+            case VINE:
+            case TWISTING_VINES:
+            case WEEPING_VINES:
+            case WEEPING_VINES_PLANT:
+            case TWISTING_VINES_PLANT:
+            case SCAFFOLDING:
+                return true;
+            default:
+                return false;
+        }
     }
 
     private void spawnHelicopter(Player player) {
