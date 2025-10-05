@@ -50,12 +50,77 @@ import com.destroystokyo.paper.event.player.PlayerSteerVehicleEvent;
 
 public class TankPlugin extends JavaPlugin implements Listener, TabCompleter {
 
-    private static final String HELMET_NAME = "ТАНК ШЛЕМ - М";
-    private static final String CHESTPLATE_NAME = "ТАНК НАГРУДНИК - М";
-    private static final String LEGGINGS_NAME = "ТАНК ПОНОЖИ - М";
-    private static final String BOOTS_NAME = "ТАНК БОТИНКИ - М";
-    private static final String SWORD_NAME = "Облученная Мачете - М";
-    private static final String MEDKIT_NAME = "Аптечка";
+    private static final String HELMET_NAME = ChatColor.GOLD + "ТАНК ШЛЕМ" + ChatColor.DARK_GRAY + " • " + ChatColor.YELLOW + "<М>";
+    private static final String CHESTPLATE_NAME = ChatColor.GOLD + "ТАНК НАГРУДНИК" + ChatColor.DARK_GRAY + " • " + ChatColor.YELLOW + "<М>";
+    private static final String LEGGINGS_NAME = ChatColor.GOLD + "ТАНК ПОНОЖИ" + ChatColor.DARK_GRAY + " • " + ChatColor.YELLOW + "<М>";
+    private static final String BOOTS_NAME = ChatColor.GOLD + "ТАНК БОТИНКИ" + ChatColor.DARK_GRAY + " • " + ChatColor.YELLOW + "<М>";
+    private static final String SWORD_NAME = ChatColor.DARK_AQUA + "Облучённая Мачете" + ChatColor.DARK_GRAY + " • " + ChatColor.RED + "<М>";
+    private static final String MEDKIT_NAME = ChatColor.GREEN + "Медкомплект \"Аптека\"";
+    private static final String RPD_NAME = ChatColor.DARK_RED + "РПД ПРЕМУМ" + ChatColor.DARK_GRAY + " • " + ChatColor.RED + "<36>";
+    private static final String REMINGTON_NAME = ChatColor.GOLD + "Ремингтон 870" + ChatColor.DARK_GRAY + " • " + ChatColor.GREEN + "<6>";
+
+    private static final List<String> HELMET_LORE = createLore(
+            ChatColor.GRAY + "Категория: " + ChatColor.YELLOW + "Шлем",
+            ChatColor.DARK_PURPLE + "Сканер ночного видения"
+    );
+    private static final List<String> CHESTPLATE_LORE = createLore(
+            ChatColor.GRAY + "Категория: " + ChatColor.YELLOW + "Броня",
+            ChatColor.LIGHT_PURPLE + "Поддержка нанорегенерации"
+    );
+    private static final List<String> LEGGINGS_LORE = createLore(
+            ChatColor.GRAY + "Категория: " + ChatColor.YELLOW + "Броня",
+            ChatColor.AQUA + "Экранирование удара: " + ChatColor.GOLD + "+2 золотых сердца",
+            ChatColor.DARK_GRAY + "Активируется при манёврах"
+    );
+    private static final List<String> BOOTS_LORE = createLore(
+            ChatColor.GRAY + "Категория: " + ChatColor.YELLOW + "Броня",
+            ChatColor.GREEN + "Усиленные сервоприводы скорости"
+    );
+    private static final List<String> SWORD_LORE = createLore(
+            ChatColor.GRAY + "Тип: " + ChatColor.RED + "Тактическое мачете",
+            ChatColor.GRAY + "Эффект: " + ChatColor.DARK_AQUA + "Сила II",
+            ChatColor.DARK_GRAY + "Хранить при себе для активации"
+    );
+    private static final List<String> MEDKIT_LORE = createLore(
+            ChatColor.GRAY + "Тип: " + ChatColor.GREEN + "Медицинский комплект",
+            ChatColor.GRAY + "Применение: " + ChatColor.WHITE + "ПКМ",
+            ChatColor.GRAY + "Требование: " + ChatColor.YELLOW + "Отсутствие полного HP",
+            ChatColor.DARK_GREEN + "Запускает отсчёт и восстанавливает здоровье"
+    );
+    private static final List<String> RPD_LORE = createLore(
+            ChatColor.GRAY + "C418 - stal",
+            "",
+            ChatColor.RED + "Урон: " + ChatColor.GOLD + "■■■■■■■■■■" + ChatColor.DARK_GRAY + "■■",
+            ChatColor.RED + "Скорострельность: " + ChatColor.GOLD + "■■■■■■■■■■■■",
+            ChatColor.RED + "Точность: " + ChatColor.GOLD + "■■■■■■■■" + ChatColor.DARK_GRAY + "■■■■",
+            ChatColor.RED + "Дальность: " + ChatColor.GOLD + "■■■■■■■■■" + ChatColor.DARK_GRAY + "■■■",
+            ChatColor.RED + "Мобильность: " + ChatColor.GOLD + "■■■■■■" + ChatColor.DARK_GRAY + "■■■■■",
+            "",
+            ChatColor.GRAY + "Тип: " + ChatColor.RED + "Пулемёт",
+            ChatColor.GRAY + "Магазин: " + ChatColor.YELLOW + "100",
+            ChatColor.GRAY + "Боеприпасы: " + ChatColor.YELLOW + "7,62×39 мм",
+            ChatColor.GRAY + "Перезарядка: " + ChatColor.YELLOW + "4 сек.",
+            "",
+            ChatColor.GOLD + "Модификации:",
+            ChatColor.YELLOW + "↑ " + ChatColor.GRAY + "УВЕЛИЧЕН УРОН",
+            ChatColor.YELLOW + "↑ " + ChatColor.GRAY + "УВЕЛИЧЕННАЯ ТОЧНОСТЬ",
+            ChatColor.YELLOW + "↑ " + ChatColor.GRAY + "УВЕЛИЧЕННАЯ СКОРОСТРЕЛЬНОСТЬ",
+            ChatColor.YELLOW + "↓ " + ChatColor.GRAY + "УМЕНЬШЕНА ОТДАЧА"
+    );
+    private static final List<String> REMINGTON_LORE = createLore(
+            ChatColor.GRAY + "C418 - blocks",
+            "",
+            ChatColor.RED + "Урон: " + ChatColor.GOLD + "■■■■■■■■■" + ChatColor.DARK_GRAY + "■■■",
+            ChatColor.RED + "Скорострельность: " + ChatColor.GOLD + "■■■" + ChatColor.DARK_GRAY + "■■■■■■■",
+            ChatColor.RED + "Точность: " + ChatColor.GOLD + "■■■■■■■" + ChatColor.DARK_GRAY + "■■■",
+            ChatColor.RED + "Дальность: " + ChatColor.GOLD + "■■■■■" + ChatColor.DARK_GRAY + "■■■■",
+            ChatColor.RED + "Мобильность: " + ChatColor.GOLD + "■■■■■■■■" + ChatColor.DARK_GRAY + "■■",
+            "",
+            ChatColor.GRAY + "Тип: " + ChatColor.RED + "Помповое ружьё",
+            ChatColor.GRAY + "Магазин: " + ChatColor.YELLOW + "7",
+            ChatColor.GRAY + "Боеприпасы: " + ChatColor.YELLOW + "12×70 мм",
+            ChatColor.GRAY + "Перезарядка: " + ChatColor.YELLOW + "0.75 сек."
+    );
 
     private BukkitTask effectTask;
     private final Set<UUID> activeMedkits = new HashSet<>();
@@ -92,35 +157,35 @@ public class TankPlugin extends JavaPlugin implements Listener, TabCompleter {
 
         Player player = (Player) sender;
         if (args.length == 0) {
-            player.sendMessage(ChatColor.RED + "Использование: /flouz1 ...");
+            sendCommandOverview(player);
             return true;
         }
 
         if (!args[0].equalsIgnoreCase("com") || args.length < 2) {
-            player.sendMessage(ChatColor.RED + "Неизвестная команда.");
+            sendCommandOverview(player);
             return true;
         }
 
         if (args[1].equalsIgnoreCase("tank")) {
             if (args.length < 3) {
-                player.sendMessage(ChatColor.RED + "Укажите предмет: helmet, chestplate, leggings, boots.");
+                player.sendMessage(ChatColor.YELLOW + "Укажите элемент сета: helmet, chestplate, leggings, boots.");
                 return true;
             }
             switch (args[2].toLowerCase()) {
                 case "helmet":
-                    giveItem(player, createNamedItem(Material.DIAMOND_HELMET, HELMET_NAME));
+                    giveItem(player, createStyledItem(Material.DIAMOND_HELMET, HELMET_NAME, HELMET_LORE));
                     player.sendMessage(ChatColor.GREEN + "Вы получили " + HELMET_NAME + ChatColor.GREEN + ".");
                     return true;
                 case "chestplate":
-                    giveItem(player, createNamedItem(Material.DIAMOND_CHESTPLATE, CHESTPLATE_NAME));
+                    giveItem(player, createStyledItem(Material.DIAMOND_CHESTPLATE, CHESTPLATE_NAME, CHESTPLATE_LORE));
                     player.sendMessage(ChatColor.GREEN + "Вы получили " + CHESTPLATE_NAME + ChatColor.GREEN + ".");
                     return true;
                 case "leggings":
-                    giveItem(player, createNamedItem(Material.DIAMOND_LEGGINGS, LEGGINGS_NAME));
+                    giveItem(player, createStyledItem(Material.DIAMOND_LEGGINGS, LEGGINGS_NAME, LEGGINGS_LORE));
                     player.sendMessage(ChatColor.GREEN + "Вы получили " + LEGGINGS_NAME + ChatColor.GREEN + ".");
                     return true;
                 case "boots":
-                    giveItem(player, createNamedItem(Material.DIAMOND_BOOTS, BOOTS_NAME));
+                    giveItem(player, createStyledItem(Material.DIAMOND_BOOTS, BOOTS_NAME, BOOTS_LORE));
                     player.sendMessage(ChatColor.GREEN + "Вы получили " + BOOTS_NAME + ChatColor.GREEN + ".");
                     return true;
                 default:
@@ -131,18 +196,26 @@ public class TankPlugin extends JavaPlugin implements Listener, TabCompleter {
 
         if (args[1].equalsIgnoreCase("luckydayz")) {
             if (args.length < 3) {
-                player.sendMessage(ChatColor.RED + "Укажите предмет: machete, medkit, helicopter.");
+                player.sendMessage(ChatColor.YELLOW + "Укажите предмет: machete, medkit, rpd, remington, helicopter.");
                 return true;
             }
 
             switch (args[2].toLowerCase()) {
                 case "machete":
-                    giveItem(player, createNamedItem(Material.DIAMOND_SWORD, SWORD_NAME));
+                    giveItem(player, createStyledItem(Material.DIAMOND_SWORD, SWORD_NAME, SWORD_LORE));
                     player.sendMessage(ChatColor.GREEN + "Вы получили " + SWORD_NAME + ChatColor.GREEN + ".");
                     return true;
                 case "medkit":
-                    giveItem(player, createNamedItem(Material.GLOWSTONE_DUST, MEDKIT_NAME));
-                    player.sendMessage(ChatColor.GREEN + "Вы получили аптечку.");
+                    giveItem(player, createStyledItem(Material.GLOWSTONE_DUST, MEDKIT_NAME, MEDKIT_LORE));
+                    player.sendMessage(ChatColor.GREEN + "Вы получили " + MEDKIT_NAME + ChatColor.GREEN + ".");
+                    return true;
+                case "rpd":
+                    giveItem(player, createStyledItem(Material.MUSIC_DISC_STAL, RPD_NAME, RPD_LORE));
+                    player.sendMessage(ChatColor.GREEN + "Вы получили " + RPD_NAME + ChatColor.GREEN + ".");
+                    return true;
+                case "remington":
+                    giveItem(player, createStyledItem(Material.MUSIC_DISC_BLOCKS, REMINGTON_NAME, REMINGTON_LORE));
+                    player.sendMessage(ChatColor.GREEN + "Вы получили " + REMINGTON_NAME + ChatColor.GREEN + ".");
                     return true;
                 case "helicopter":
                     if (args.length >= 4 && args[3].equalsIgnoreCase("speed")) {
@@ -177,7 +250,7 @@ public class TankPlugin extends JavaPlugin implements Listener, TabCompleter {
             }
         }
 
-        player.sendMessage(ChatColor.RED + "Неизвестная команда.");
+        sendCommandOverview(player);
         return true;
     }
 
@@ -185,19 +258,46 @@ public class TankPlugin extends JavaPlugin implements Listener, TabCompleter {
         player.getInventory().addItem(item);
     }
 
-    private ItemStack createNamedItem(Material material, String name) {
+    private ItemStack createStyledItem(Material material, String name, List<String> lore) {
         ItemStack stack = new ItemStack(material);
         ItemMeta meta = stack.getItemMeta();
         if (meta != null) {
             meta.setDisplayName(name);
+            if (lore != null) {
+                meta.setLore(new ArrayList<>(lore));
+            }
             stack.setItemMeta(meta);
         }
         return stack;
     }
 
+    private static List<String> createLore(String... lines) {
+        List<String> lore = new ArrayList<>();
+        for (String line : lines) {
+            lore.add(line);
+        }
+        return lore;
+    }
+
+    private void sendCommandOverview(Player player) {
+        player.sendMessage(ChatColor.AQUA + "Доступные команды:");
+        player.sendMessage(ChatColor.GRAY + "/flouz1 com tank helmet" + ChatColor.DARK_GRAY + " — " + ChatColor.YELLOW + ChatColor.stripColor(HELMET_NAME));
+        player.sendMessage(ChatColor.GRAY + "/flouz1 com tank chestplate" + ChatColor.DARK_GRAY + " — " + ChatColor.YELLOW + ChatColor.stripColor(CHESTPLATE_NAME));
+        player.sendMessage(ChatColor.GRAY + "/flouz1 com tank leggings" + ChatColor.DARK_GRAY + " — " + ChatColor.YELLOW + ChatColor.stripColor(LEGGINGS_NAME));
+        player.sendMessage(ChatColor.GRAY + "/flouz1 com tank boots" + ChatColor.DARK_GRAY + " — " + ChatColor.YELLOW + ChatColor.stripColor(BOOTS_NAME));
+        player.sendMessage(ChatColor.GRAY + "/flouz1 com luckydayz machete" + ChatColor.DARK_GRAY + " — " + ChatColor.YELLOW + ChatColor.stripColor(SWORD_NAME));
+        player.sendMessage(ChatColor.GRAY + "/flouz1 com luckydayz medkit" + ChatColor.DARK_GRAY + " — " + ChatColor.YELLOW + ChatColor.stripColor(MEDKIT_NAME));
+        player.sendMessage(ChatColor.GRAY + "/flouz1 com luckydayz rpd" + ChatColor.DARK_GRAY + " — " + ChatColor.YELLOW + ChatColor.stripColor(RPD_NAME));
+        player.sendMessage(ChatColor.GRAY + "/flouz1 com luckydayz remington" + ChatColor.DARK_GRAY + " — " + ChatColor.YELLOW + ChatColor.stripColor(REMINGTON_NAME));
+        player.sendMessage(ChatColor.GRAY + "/flouz1 com luckydayz helicopter" + ChatColor.DARK_GRAY + " — " + ChatColor.YELLOW + "личный вертолёт");
+        player.sendMessage(ChatColor.GRAY + "/flouz1 com luckydayz helicopter speed <0.1-2.0>" + ChatColor.DARK_GRAY + " — " + ChatColor.YELLOW + "настройка скорости вертолёта");
+    }
+
     @EventHandler
     public void onPlayerJoin(PlayerJoinEvent event) {
-        Bukkit.getScheduler().runTaskLater(this, () -> updateEffectsFor(event.getPlayer()), 1L);
+        Player player = event.getPlayer();
+        updateEffectsFor(player);
+        Bukkit.getScheduler().runTask(this, () -> updateEffectsFor(player));
     }
 
     @EventHandler
@@ -219,12 +319,13 @@ public class TankPlugin extends JavaPlugin implements Listener, TabCompleter {
                 applyAbsorption(player);
             }
         }
+        updateEffectsFor(event.getPlayer());
     }
 
     @EventHandler
     public void onInventoryClick(InventoryClickEvent event) {
         if (event.getWhoClicked() instanceof Player) {
-            Bukkit.getScheduler().runTaskLater(this, () -> updateEffectsFor((Player) event.getWhoClicked()), 1L);
+            Bukkit.getScheduler().runTask(this, () -> updateEffectsFor((Player) event.getWhoClicked()));
         }
     }
 
@@ -232,9 +333,7 @@ public class TankPlugin extends JavaPlugin implements Listener, TabCompleter {
     public void onInventoryOpen(InventoryOpenEvent event) {
         if (event.getPlayer() instanceof Player) {
             Player player = (Player) event.getPlayer();
-            if (isWearingTankLeggings(player)) {
-                applyAbsorption(player);
-            }
+            updateEffectsFor(player);
         }
     }
 
@@ -242,20 +341,18 @@ public class TankPlugin extends JavaPlugin implements Listener, TabCompleter {
     public void onInventoryClose(InventoryCloseEvent event) {
         if (event.getPlayer() instanceof Player) {
             Player player = (Player) event.getPlayer();
-            if (isWearingTankLeggings(player)) {
-                applyAbsorption(player);
-            }
+            updateEffectsFor(player);
         }
     }
 
     @EventHandler
     public void onArmorChange(PlayerArmorChangeEvent event) {
-        Bukkit.getScheduler().runTaskLater(this, () -> updateEffectsFor(event.getPlayer()), 1L);
+        updateEffectsFor(event.getPlayer());
     }
 
     @EventHandler
     public void onSwapItems(PlayerSwapHandItemsEvent event) {
-        Bukkit.getScheduler().runTaskLater(this, () -> updateEffectsFor(event.getPlayer()), 1L);
+        updateEffectsFor(event.getPlayer());
     }
 
     @EventHandler
@@ -302,7 +399,7 @@ public class TankPlugin extends JavaPlugin implements Listener, TabCompleter {
             }
         }
 
-        MedkitSession session = new MedkitSession(player.getLevel(), player.getExp());
+        MedkitSession session = new MedkitSession(player.getLevel(), player.getExp(), player.getTotalExperience());
         medkitSessions.put(uuid, session);
 
         new BukkitRunnable() {
@@ -538,6 +635,8 @@ public class TankPlugin extends JavaPlugin implements Listener, TabCompleter {
             if (args.length == 3) {
                 suggestions.add("machete");
                 suggestions.add("medkit");
+                suggestions.add("rpd");
+                suggestions.add("remington");
                 suggestions.add("helicopter");
                 return filterPrefix(suggestions, args[2]);
             }
@@ -696,19 +795,29 @@ public class TankPlugin extends JavaPlugin implements Listener, TabCompleter {
     private static class MedkitSession {
         private final int level;
         private final float exp;
+        private final int totalExperience;
 
-        MedkitSession(int level, float exp) {
+        MedkitSession(int level, float exp, int totalExperience) {
             this.level = level;
             this.exp = exp;
+            this.totalExperience = totalExperience;
         }
 
         void applyProgress(Player player, int step) {
-            player.setLevel(0);
+            if (step <= 0) {
+                player.setLevel(0);
+                player.setExp(0.0F);
+                player.setTotalExperience(0);
+                return;
+            }
+            player.setLevel(step);
             float progress = Math.min(1.0F, step / 10.0F);
             player.setExp(progress);
+            player.setTotalExperience(step * 10);
         }
 
         void restore(Player player) {
+            player.setTotalExperience(totalExperience);
             player.setLevel(level);
             player.setExp(exp);
         }
