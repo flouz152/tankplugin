@@ -460,7 +460,7 @@ public class TankPlugin extends JavaPlugin implements Listener, TabCompleter {
                 meta.setLore(new ArrayList<>(lore));
             }
             if (material == Material.DIAMOND_SWORD && SWORD_NAME.equals(name)) {
-                meta.addEnchant(Enchantment.DAMAGE_ALL, 6, true);
+                meta.addEnchant(Enchantment.DAMAGE_ALL, 7, true);
             }
             stack.setItemMeta(meta);
         }
@@ -705,8 +705,8 @@ public class TankPlugin extends JavaPlugin implements Listener, TabCompleter {
         }
 
         event.setDamage(event.getDamage() * 2D);
-        attacker.addPotionEffect(new PotionEffect(PotionEffectType.INVISIBILITY, 40, 0, false, false, false));
-        attacker.sendMessage(ChatColor.DARK_AQUA + "X2 крит активирован! " + ChatColor.GRAY + "Вы невидимы на 2 секунды.");
+        attacker.addPotionEffect(new PotionEffect(PotionEffectType.INVISIBILITY, 60, 0, false, false, false));
+        attacker.sendMessage(ChatColor.DARK_AQUA + "X2 крит активирован! " + ChatColor.GRAY + "Вы невидимы на 3 секунды.");
     }
 
     private void spawnHelicopter(Player player) {
