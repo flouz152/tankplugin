@@ -1,7 +1,5 @@
 package com.flouz1.tankplugin;
 
-import java.lang.reflect.InvocationTargetException;
-import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -10,7 +8,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.logging.Level;
 
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
@@ -24,12 +21,15 @@ import org.bukkit.command.TabCompleter;
 import org.bukkit.entity.ArmorStand;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.EntityType;
+import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Player;
-import org.bukkit.event.Event;
+import org.bukkit.entity.Projectile;
+import org.bukkit.entity.Snowball;
 import org.bukkit.event.EventHandler;
-import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.Action;
+import org.bukkit.event.entity.EntityDamageByEntityEvent;
+import org.bukkit.event.entity.ProjectileHitEvent;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryCloseEvent;
 import org.bukkit.event.inventory.InventoryOpenEvent;
@@ -43,7 +43,6 @@ import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.PlayerInventory;
 import org.bukkit.inventory.meta.ItemMeta;
-import org.bukkit.plugin.EventExecutor;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.potion.PotionEffect;
 import org.bukkit.potion.PotionEffectType;
@@ -52,6 +51,7 @@ import org.bukkit.scheduler.BukkitTask;
 import org.bukkit.util.Vector;
 
 import com.destroystokyo.paper.event.player.PlayerArmorChangeEvent;
+import com.destroystokyo.paper.event.player.PlayerSteerVehicleEvent;
 
 public class TankPlugin extends JavaPlugin implements Listener, TabCompleter {
 
@@ -63,6 +63,13 @@ public class TankPlugin extends JavaPlugin implements Listener, TabCompleter {
     private static final String MEDKIT_NAME = ChatColor.GREEN + "Медкомплект \"Аптека\"";
     private static final String RPD_NAME = ChatColor.DARK_RED + "РПД ПРЕМУМ" + ChatColor.DARK_GRAY + " • " + ChatColor.RED + "<36>";
     private static final String REMINGTON_NAME = ChatColor.GOLD + "Ремингтон 870" + ChatColor.DARK_GRAY + " • " + ChatColor.GREEN + "<6>";
+
+    private static final double RPD_DAMAGE = 9.0D;
+    private static final double REMINGTON_DAMAGE = 14.0D;
+    private static final double RPD_SPEED = 2.6D;
+    private static final double REMINGTON_SPEED = 2.0D;
+    private static final int RPD_COOLDOWN_TICKS = 4;
+    private static final int REMINGTON_COOLDOWN_TICKS = 16;
 
     private static final List<String> HELMET_LORE = createLore(
             ChatColor.GRAY + "Категория: " + ChatColor.YELLOW + "Шлем",
@@ -133,6 +140,7 @@ public class TankPlugin extends JavaPlugin implements Listener, TabCompleter {
     private final Map<UUID, Helicopter> helicopters = new HashMap<>();
     private final Map<UUID, UUID> seatOwners = new HashMap<>();
     private final Map<UUID, ControlState> controlStates = new ConcurrentHashMap<>();
+    private final Map<UUID, WeaponType> projectileTypes = new HashMap<>();
 
     @Override
     public void onEnable() {
@@ -140,7 +148,6 @@ public class TankPlugin extends JavaPlugin implements Listener, TabCompleter {
         if (getCommand("flouz1") != null) {
             getCommand("flouz1").setTabCompleter(this);
         }
-        registerSteerListener();
         effectTask = Bukkit.getScheduler().runTaskTimer(this, this::updateEffects, 1L, 1L);
     }
 
@@ -340,6 +347,9 @@ public class TankPlugin extends JavaPlugin implements Listener, TabCompleter {
         if (event.getPlayer() instanceof Player) {
             Player player = (Player) event.getPlayer();
             updateEffectsFor(player);
+            if (isWearingTankLeggings(player)) {
+                applyAbsorption(player);
+            }
         }
     }
 
@@ -348,6 +358,9 @@ public class TankPlugin extends JavaPlugin implements Listener, TabCompleter {
         if (event.getPlayer() instanceof Player) {
             Player player = (Player) event.getPlayer();
             updateEffectsFor(player);
+            if (isWearingTankLeggings(player)) {
+                applyAbsorption(player);
+            }
         }
     }
 
@@ -372,71 +385,21 @@ public class TankPlugin extends JavaPlugin implements Listener, TabCompleter {
             return;
         }
         ItemStack item = event.getItem();
-        if (!isNamedItem(item, Material.GLOWSTONE_DUST, MEDKIT_NAME)) {
-            return;
-        }
         Player player = event.getPlayer();
-        UUID uuid = player.getUniqueId();
-        if (!activeMedkits.add(uuid)) {
-            return;
-        }
-        event.setCancelled(true);
 
-        AttributeInstance attribute = player.getAttribute(Attribute.GENERIC_MAX_HEALTH);
-        double maxHealth = attribute != null ? attribute.getValue() : player.getMaxHealth();
-        if (player.getHealth() >= maxHealth) {
-            player.sendMessage(ChatColor.YELLOW + "У вас полное здоровье. Аптечка не требуется.");
-            activeMedkits.remove(uuid);
+        if (isNamedItem(item, Material.GLOWSTONE_DUST, MEDKIT_NAME)) {
+            handleMedkitUse(event, player, handUsed);
             return;
         }
 
-        PlayerInventory inventory = player.getInventory();
-        ItemStack hand = event.getItem();
-        if (hand != null) {
-            int amount = hand.getAmount();
-            if (amount > 1) {
-                hand.setAmount(amount - 1);
-            } else {
-                if (handUsed == EquipmentSlot.HAND) {
-                    inventory.setItemInMainHand(null);
-                } else {
-                    inventory.setItemInOffHand(null);
-                }
-            }
+        if (isNamedItem(item, Material.MUSIC_DISC_STAL, RPD_NAME)) {
+            handleWeaponFire(event, player, item, WeaponType.RPD);
+            return;
         }
 
-        MedkitSession session = new MedkitSession(player.getLevel(), player.getExp(), player.getTotalExperience());
-        medkitSessions.put(uuid, session);
-
-        new BukkitRunnable() {
-            int counter = 8;
-            int progressStep = 0;
-
-            @Override
-            public void run() {
-                if (!player.isOnline()) {
-                    cancel();
-                    cleanupMedkit(uuid, player);
-                    return;
-                }
-
-                progressStep = Math.min(progressStep + 1, 10);
-                session.applyProgress(player, progressStep);
-                if (counter >= 0) {
-                    player.sendMessage(ChatColor.WHITE.toString() + ChatColor.BOLD + "Аптека отхилит вас через " + counter);
-                }
-
-                if (counter == 0) {
-                    player.setHealth(maxHealth);
-                    session.applyProgress(player, 10);
-                    Bukkit.getScheduler().runTaskLater(TankPlugin.this, () -> cleanupMedkit(uuid, player), 2L);
-                    cancel();
-                    return;
-                }
-
-                counter--;
-            }
-        }.runTaskTimer(this, 0L, 20L);
+        if (isNamedItem(item, Material.MUSIC_DISC_BLOCKS, REMINGTON_NAME)) {
+            handleWeaponFire(event, player, item, WeaponType.REMINGTON);
+        }
     }
 
     @EventHandler
@@ -458,64 +421,23 @@ public class TankPlugin extends JavaPlugin implements Listener, TabCompleter {
         }
     }
 
-    private void registerSteerListener() {
-        final Class<? extends Event> steerClass;
-        final Method getPlayerMethod;
-        final Method getForwardMethod;
-        final Method getSidewaysMethod;
-        final Method isJumpingMethod;
-        final Method isSneakingMethod;
-        final Method setCancelledMethod;
-
-        try {
-            Class<?> rawClass = Class.forName("com.destroystokyo.paper.event.player.PlayerSteerVehicleEvent");
-            steerClass = rawClass.asSubclass(Event.class);
-            getPlayerMethod = rawClass.getMethod("getPlayer");
-            getForwardMethod = rawClass.getMethod("getForward");
-            getSidewaysMethod = rawClass.getMethod("getSideways");
-            isJumpingMethod = rawClass.getMethod("isJumping");
-            isSneakingMethod = rawClass.getMethod("isSneaking");
-            setCancelledMethod = rawClass.getMethod("setCancelled", boolean.class);
-        } catch (ClassNotFoundException ex) {
-            getLogger().warning("PlayerSteerVehicleEvent не найден в API — управление вертолётом будет ограничено.");
-            return;
-        } catch (NoSuchMethodException ex) {
-            getLogger().log(Level.WARNING, "Не удалось подготовить обработчик управления вертолётом.", ex);
+    @EventHandler
+    public void onPlayerSteerVehicle(PlayerSteerVehicleEvent event) {
+        Player player = event.getPlayer();
+        Helicopter helicopter = helicopters.get(player.getUniqueId());
+        if (helicopter == null || !helicopter.isDriver(player)) {
             return;
         }
 
-        EventExecutor executor = (listener, event) -> {
-            if (!steerClass.isInstance(event)) {
-                return;
-            }
-            handleSteerEvent(event, getPlayerMethod, getForwardMethod, getSidewaysMethod, isJumpingMethod,
-                    isSneakingMethod, setCancelledMethod);
-        };
-
-        Bukkit.getPluginManager().registerEvent(steerClass, this, EventPriority.NORMAL, executor, this);
-    }
-
-    private void handleSteerEvent(Object event, Method getPlayerMethod, Method getForwardMethod, Method getSidewaysMethod,
-            Method isJumpingMethod, Method isSneakingMethod, Method setCancelledMethod) {
-        try {
-            Player player = (Player) getPlayerMethod.invoke(event);
-            Helicopter helicopter = helicopters.get(player.getUniqueId());
-            if (helicopter == null || !helicopter.isDriver(player)) {
-                return;
-            }
-
-            ControlState state = controlStates.computeIfAbsent(player.getUniqueId(), ignored -> new ControlState());
-            float forward = ((Number) getForwardMethod.invoke(event)).floatValue();
-            float sideways = ((Number) getSidewaysMethod.invoke(event)).floatValue();
-            state.forward = forward > 0.01F;
-            state.turnLeft = sideways < -0.01F;
-            state.turnRight = sideways > 0.01F;
-            state.up = (boolean) isJumpingMethod.invoke(event);
-            state.down = forward < -0.01F || (boolean) isSneakingMethod.invoke(event);
-            setCancelledMethod.invoke(event, true);
-        } catch (IllegalAccessException | InvocationTargetException ex) {
-            getLogger().log(Level.WARNING, "Ошибка обработки управления вертолётом.", ex);
-        }
+        ControlState state = controlStates.computeIfAbsent(player.getUniqueId(), ignored -> new ControlState());
+        float forward = event.getForward();
+        float sideways = event.getSideways();
+        state.forward = forward > 0.01F;
+        state.turnLeft = sideways < -0.01F;
+        state.turnRight = sideways > 0.01F;
+        state.up = event.isJumping();
+        state.down = forward < -0.01F || event.isSneaking();
+        event.setCancelled(true);
     }
 
     private void updateEffects() {
@@ -539,7 +461,9 @@ public class TankPlugin extends JavaPlugin implements Listener, TabCompleter {
             removeEffect(player, PotionEffectType.REGENERATION);
         }
 
-        if (!isWearingTankLeggings(player)) {
+        if (isWearingTankLeggings(player)) {
+            applyAbsorption(player);
+        } else {
             removeEffect(player, PotionEffectType.ABSORPTION);
         }
 
@@ -605,11 +529,17 @@ public class TankPlugin extends JavaPlugin implements Listener, TabCompleter {
         parts.add(createPart(base.clone(), Material.GREEN_CONCRETE, new Vector(0, -0.5, 0)));
         parts.add(createPart(base.clone().add(0, 0.6, 0), Material.IRON_TRAPDOOR, new Vector(0, 0, 0)));
         parts.add(createPart(base.clone().add(0, -0.2, 0.8), Material.BLACK_CONCRETE, new Vector(0, 0, 0)));
+        parts.add(createPart(base.clone().add(0, -0.2, -0.9), Material.GRAY_CONCRETE, new Vector(0, 0, 0)));
+        parts.add(createPart(base.clone().add(0.9, -0.2, -0.1), Material.GRAY_CONCRETE, new Vector(0, 0, 0)));
+        parts.add(createPart(base.clone().add(-0.9, -0.2, -0.1), Material.GRAY_CONCRETE, new Vector(0, 0, 0)));
+        parts.add(createPart(base.clone().add(0, 0.9, 0), Material.BLACK_CONCRETE, new Vector(0, 0, 0)));
+        parts.add(createPart(base.clone().add(0, 1.2, 0), Material.IRON_BARS, new Vector(0, 0, 0)));
 
         Helicopter helicopter = new Helicopter(this, seat, parts, player.getUniqueId());
         helicopters.put(uuid, helicopter);
         seatOwners.put(seat.getUniqueId(), uuid);
         controlStates.put(uuid, new ControlState());
+        helicopter.start();
         player.sendMessage(ChatColor.GREEN + "Вы вызвали вертолет.");
     }
 
@@ -647,6 +577,110 @@ public class TankPlugin extends JavaPlugin implements Listener, TabCompleter {
         if (session != null && player.isOnline()) {
             session.restore(player);
         }
+    }
+
+    @EventHandler
+    public void onProjectileDamage(EntityDamageByEntityEvent event) {
+        Entity damager = event.getDamager();
+        if (!(damager instanceof Projectile)) {
+            return;
+        }
+        Projectile projectile = (Projectile) damager;
+        WeaponType type = projectileTypes.remove(projectile.getUniqueId());
+        if (type == null) {
+            return;
+        }
+        if (!(projectile.getShooter() instanceof Player)) {
+            return;
+        }
+        if (!(event.getEntity() instanceof LivingEntity)) {
+            return;
+        }
+        event.setDamage(type.getDamage());
+    }
+
+    @EventHandler
+    public void onProjectileHit(ProjectileHitEvent event) {
+        Projectile projectile = event.getEntity();
+        if (projectileTypes.remove(projectile.getUniqueId()) != null) {
+            projectile.remove();
+        }
+    }
+
+    private void handleMedkitUse(PlayerInteractEvent event, Player player, EquipmentSlot handUsed) {
+        UUID uuid = player.getUniqueId();
+        if (!activeMedkits.add(uuid)) {
+            return;
+        }
+        event.setCancelled(true);
+
+        AttributeInstance attribute = player.getAttribute(Attribute.GENERIC_MAX_HEALTH);
+        double maxHealth = attribute != null ? attribute.getValue() : player.getMaxHealth();
+        if (player.getHealth() >= maxHealth) {
+            player.sendMessage(ChatColor.YELLOW + "У вас полное здоровье. Аптечка не требуется.");
+            activeMedkits.remove(uuid);
+            return;
+        }
+
+        PlayerInventory inventory = player.getInventory();
+        ItemStack hand = event.getItem();
+        if (hand != null) {
+            int amount = hand.getAmount();
+            if (amount > 1) {
+                hand.setAmount(amount - 1);
+            } else if (handUsed == EquipmentSlot.HAND) {
+                inventory.setItemInMainHand(null);
+            } else {
+                inventory.setItemInOffHand(null);
+            }
+        }
+
+        MedkitSession session = new MedkitSession(player.getLevel(), player.getExp(), player.getTotalExperience());
+        medkitSessions.put(uuid, session);
+
+        new BukkitRunnable() {
+            int counter = 8;
+            int progressStep = 0;
+
+            @Override
+            public void run() {
+                if (!player.isOnline()) {
+                    cancel();
+                    cleanupMedkit(uuid, player);
+                    return;
+                }
+
+                progressStep = Math.min(progressStep + 1, 10);
+                session.applyProgress(player, progressStep);
+                player.sendMessage(ChatColor.WHITE.toString() + ChatColor.BOLD + "Аптека отхилит вас через " + counter);
+
+                if (counter <= 0) {
+                    double healedMax = attribute != null ? attribute.getValue() : player.getMaxHealth();
+                    player.setHealth(healedMax);
+                    cancel();
+                    Bukkit.getScheduler().runTask(TankPlugin.this, () -> cleanupMedkit(uuid, player));
+                    return;
+                }
+
+                counter--;
+            }
+        }.runTaskTimer(this, 0L, 20L);
+    }
+
+    private void handleWeaponFire(PlayerInteractEvent event, Player player, ItemStack item, WeaponType type) {
+        if (player.getCooldown(item.getType()) > 0) {
+            return;
+        }
+
+        event.setCancelled(true);
+        Snowball projectile = player.launchProjectile(Snowball.class);
+        projectile.setGravity(false);
+        projectile.setInvulnerable(true);
+        projectile.setVelocity(player.getLocation().getDirection().normalize().multiply(type.getSpeed()));
+        projectileTypes.put(projectile.getUniqueId(), type);
+        player.setCooldown(item.getType(), type.getCooldownTicks());
+
+        Bukkit.getScheduler().runTaskLater(this, () -> projectileTypes.remove(projectile.getUniqueId()), 200L);
     }
 
     @Override
@@ -836,6 +870,33 @@ public class TankPlugin extends JavaPlugin implements Listener, TabCompleter {
             turnRight = false;
             up = false;
             down = false;
+        }
+    }
+
+    private enum WeaponType {
+        RPD(RPD_DAMAGE, RPD_SPEED, RPD_COOLDOWN_TICKS),
+        REMINGTON(REMINGTON_DAMAGE, REMINGTON_SPEED, REMINGTON_COOLDOWN_TICKS);
+
+        private final double damage;
+        private final double speed;
+        private final int cooldownTicks;
+
+        WeaponType(double damage, double speed, int cooldownTicks) {
+            this.damage = damage;
+            this.speed = speed;
+            this.cooldownTicks = cooldownTicks;
+        }
+
+        double getDamage() {
+            return damage;
+        }
+
+        double getSpeed() {
+            return speed;
+        }
+
+        int getCooldownTicks() {
+            return cooldownTicks;
         }
     }
 
