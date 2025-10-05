@@ -10,6 +10,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ThreadLocalRandom;
 
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
@@ -48,6 +49,7 @@ import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.PlayerInventory;
 import org.bukkit.inventory.meta.ItemMeta;
+import org.bukkit.enchantments.Enchantment;
 import org.bukkit.persistence.PersistentDataContainer;
 import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.plugin.EventExecutor;
@@ -146,6 +148,8 @@ public class TankPlugin extends JavaPlugin implements Listener, TabCompleter {
     private final Map<UUID, ControlState> controlStates = new ConcurrentHashMap<>();
     private final Map<UUID, WeaponType> projectileTypes = new HashMap<>();
     private final Map<WeaponType, WeaponStats> weaponStats = new EnumMap<>(WeaponType.class);
+    private final Map<UUID, UUID> pendingDoubleCrits = new ConcurrentHashMap<>();
+    private double macheteDoubleCritChance = 0.11D;
 
     @Override
     public void onEnable() {
@@ -158,6 +162,7 @@ public class TankPlugin extends JavaPlugin implements Listener, TabCompleter {
         ammoKey = new NamespacedKey(this, "ammo");
         effectTask = Bukkit.getScheduler().runTaskTimer(this, this::updateEffects, 1L, 1L);
         registerSteerListener();
+        registerAttackListener();
     }
 
     @Override
@@ -168,6 +173,7 @@ public class TankPlugin extends JavaPlugin implements Listener, TabCompleter {
         }
         new HashSet<>(helicopters.keySet()).forEach(this::removeHelicopter);
         seatOwners.clear();
+        pendingDoubleCrits.clear();
     }
 
     private void registerSteerListener() {
@@ -216,6 +222,41 @@ public class TankPlugin extends JavaPlugin implements Listener, TabCompleter {
         }
     }
 
+    private void registerAttackListener() {
+        try {
+            @SuppressWarnings("unchecked")
+            Class<? extends Event> attackClass = (Class<? extends Event>) Class
+                    .forName("com.destroystokyo.paper.event.player.PlayerAttackEntityEvent");
+
+            Method getPlayer = attackClass.getMethod("getPlayer");
+            Method getEntity = attackClass.getMethod("getEntity");
+            Method isCritical = attackClass.getMethod("isCritical");
+
+            Listener listener = new Listener() {
+            };
+            EventExecutor executor = (ignored, event) -> {
+                if (!attackClass.isInstance(event)) {
+                    return;
+                }
+
+                try {
+                    Player player = (Player) getPlayer.invoke(event);
+                    Entity target = (Entity) getEntity.invoke(event);
+                    boolean critical = (Boolean) isCritical.invoke(event);
+                    handlePotentialDoubleCrit(player, target, critical);
+                } catch (ReflectiveOperationException ex) {
+                    getLogger().warning("Не удалось обработать крит мачете: " + ex.getMessage());
+                }
+            };
+
+            Bukkit.getPluginManager().registerEvent(attackClass, listener, EventPriority.MONITOR, executor, this, true);
+        } catch (ClassNotFoundException ex) {
+            getLogger().warning("PlayerAttackEntityEvent недоступен. X2 крит мачете будет ограничен.");
+        } catch (ReflectiveOperationException ex) {
+            getLogger().severe("Не удалось инициализировать обработку критов мачете: " + ex.getMessage());
+        }
+    }
+
     private Method findOptionalBooleanAccessor(Class<?> type, String... names) {
         for (String name : names) {
             try {
@@ -239,6 +280,24 @@ public class TankPlugin extends JavaPlugin implements Listener, TabCompleter {
         }
     }
 
+    private void handlePotentialDoubleCrit(Player attacker, Entity rawTarget, boolean critical) {
+        if (!critical || macheteDoubleCritChance <= 0D) {
+            return;
+        }
+        if (!(rawTarget instanceof Player)) {
+            return;
+        }
+        Player target = (Player) rawTarget;
+        if (!isNamedItem(attacker.getInventory().getItemInMainHand(), Material.DIAMOND_SWORD, SWORD_NAME)) {
+            return;
+        }
+        double roll = ThreadLocalRandom.current().nextDouble();
+        if (roll >= macheteDoubleCritChance) {
+            return;
+        }
+        pendingDoubleCrits.put(attacker.getUniqueId(), target.getUniqueId());
+    }
+
     private void loadWeaponConfig() {
         reloadConfig();
         FileConfiguration config = getConfig();
@@ -249,11 +308,17 @@ public class TankPlugin extends JavaPlugin implements Listener, TabCompleter {
             config.addDefault(base + ".damage", type.getDefaultDamage());
             config.addDefault(base + ".speed", type.getDefaultSpeed());
         }
+        config.addDefault("luckydayz.machete.double-crit-chance", 0.11D);
 
         config.options().copyDefaults(true);
         saveConfig();
 
         projectileLifetimeTicks = Math.max(1, config.getInt("weapons.projectile-lifetime-ticks", 60));
+        macheteDoubleCritChance = config.getDouble("luckydayz.machete.double-crit-chance", 0.11D);
+        if (!Double.isFinite(macheteDoubleCritChance)) {
+            macheteDoubleCritChance = 0.11D;
+        }
+        macheteDoubleCritChance = Math.max(0D, Math.min(1D, macheteDoubleCritChance));
         weaponStats.clear();
         for (WeaponType type : WeaponType.values()) {
             String base = "weapons." + type.getConfigKey();
@@ -393,6 +458,9 @@ public class TankPlugin extends JavaPlugin implements Listener, TabCompleter {
             meta.setDisplayName(name);
             if (lore != null) {
                 meta.setLore(new ArrayList<>(lore));
+            }
+            if (material == Material.DIAMOND_SWORD && SWORD_NAME.equals(name)) {
+                meta.addEnchant(Enchantment.DAMAGE_ALL, 6, true);
             }
             stack.setItemMeta(meta);
         }
@@ -622,6 +690,25 @@ public class TankPlugin extends JavaPlugin implements Listener, TabCompleter {
         return meta != null && name.equals(meta.getDisplayName());
     }
 
+    private void handleMacheteDamage(EntityDamageByEntityEvent event, Player attacker) {
+        UUID attackerId = attacker.getUniqueId();
+        UUID expectedTarget = pendingDoubleCrits.remove(attackerId);
+        if (expectedTarget == null) {
+            return;
+        }
+        Entity victim = event.getEntity();
+        if (!(victim instanceof Player) || !victim.getUniqueId().equals(expectedTarget)) {
+            return;
+        }
+        if (!isNamedItem(attacker.getInventory().getItemInMainHand(), Material.DIAMOND_SWORD, SWORD_NAME)) {
+            return;
+        }
+
+        event.setDamage(event.getDamage() * 2D);
+        attacker.addPotionEffect(new PotionEffect(PotionEffectType.INVISIBILITY, 40, 0, false, false, false));
+        attacker.sendMessage(ChatColor.DARK_AQUA + "X2 крит активирован! " + ChatColor.GRAY + "Вы невидимы на 2 секунды.");
+    }
+
     private void spawnHelicopter(Player player) {
         UUID uuid = player.getUniqueId();
         removeHelicopter(uuid);
@@ -694,6 +781,19 @@ public class TankPlugin extends JavaPlugin implements Listener, TabCompleter {
     @EventHandler
     public void onProjectileDamage(EntityDamageByEntityEvent event) {
         Entity damager = event.getDamager();
+        if (damager instanceof Player) {
+            Player player = (Player) damager;
+            if (event.isCancelled()) {
+                pendingDoubleCrits.remove(player.getUniqueId());
+                return;
+            }
+            handleMacheteDamage(event, player);
+        }
+
+        if (event.isCancelled()) {
+            return;
+        }
+
         if (!(damager instanceof Projectile)) {
             return;
         }
