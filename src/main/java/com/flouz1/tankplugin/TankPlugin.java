@@ -1,8 +1,7 @@
 package com.flouz1.tankplugin;
 
-import java.lang.reflect.InvocationTargetException;
-import java.lang.reflect.Method;
 import java.util.ArrayList;
+import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -10,7 +9,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.logging.Level;
 
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
@@ -29,15 +27,14 @@ import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Player;
 import org.bukkit.entity.Projectile;
 import org.bukkit.entity.Snowball;
-import org.bukkit.event.Event;
 import org.bukkit.event.EventHandler;
-import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.Action;
 import org.bukkit.event.entity.EntityDamageByEntityEvent;
 import org.bukkit.event.entity.ProjectileHitEvent;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryCloseEvent;
+import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.event.player.PlayerInteractAtEntityEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.player.PlayerItemHeldEvent;
@@ -58,6 +55,7 @@ import org.bukkit.scheduler.BukkitTask;
 import org.bukkit.util.Vector;
 
 import com.destroystokyo.paper.event.player.PlayerArmorChangeEvent;
+import com.destroystokyo.paper.event.player.PlayerSteerVehicleEvent;
 
 public class TankPlugin extends JavaPlugin implements Listener, TabCompleter {
 
@@ -71,13 +69,6 @@ public class TankPlugin extends JavaPlugin implements Listener, TabCompleter {
     private static final String REMINGTON_NAME = ChatColor.GOLD + "Ремингтон 870" + ChatColor.DARK_GRAY + " • " + ChatColor.GREEN + "<6>";
     private static final String AMMO_LORE_PREFIX = ChatColor.GRAY + "Боезапас: ";
     private static final String AMMO_STRIPPED_PREFIX = "Боезапас:";
-
-    private static final double RPD_DAMAGE = 9.0D;
-    private static final double REMINGTON_DAMAGE = 14.0D;
-    private static final double RPD_SPEED = 2.6D;
-    private static final double REMINGTON_SPEED = 2.0D;
-    private static final int RPD_COOLDOWN_TICKS = 4;
-    private static final int REMINGTON_COOLDOWN_TICKS = 16;
 
     private static final List<String> HELMET_LORE = createLore(
             ChatColor.GRAY + "Категория: " + ChatColor.YELLOW + "Шлем",
@@ -144,19 +135,14 @@ public class TankPlugin extends JavaPlugin implements Listener, TabCompleter {
 
     private BukkitTask effectTask;
     private NamespacedKey ammoKey;
-    private Class<? extends Event> steerEventClass;
-    private Method steerGetPlayer;
-    private Method steerGetForward;
-    private Method steerGetSideways;
-    private Method steerIsJumping;
-    private Method steerIsSneaking;
-    private Method steerSetCancelled;
+    private int projectileLifetimeTicks = 60;
     private final Set<UUID> activeMedkits = new HashSet<>();
     private final Map<UUID, MedkitSession> medkitSessions = new HashMap<>();
     private final Map<UUID, Helicopter> helicopters = new HashMap<>();
     private final Map<UUID, UUID> seatOwners = new HashMap<>();
     private final Map<UUID, ControlState> controlStates = new ConcurrentHashMap<>();
     private final Map<UUID, WeaponType> projectileTypes = new HashMap<>();
+    private final Map<WeaponType, WeaponStats> weaponStats = new EnumMap<>(WeaponType.class);
 
     @Override
     public void onEnable() {
@@ -164,8 +150,9 @@ public class TankPlugin extends JavaPlugin implements Listener, TabCompleter {
         if (getCommand("flouz1") != null) {
             getCommand("flouz1").setTabCompleter(this);
         }
+        saveDefaultConfig();
+        loadWeaponConfig();
         ammoKey = new NamespacedKey(this, "ammo");
-        setupSteerReflection();
         effectTask = Bukkit.getScheduler().runTaskTimer(this, this::updateEffects, 1L, 1L);
     }
 
@@ -177,45 +164,39 @@ public class TankPlugin extends JavaPlugin implements Listener, TabCompleter {
         }
         new HashSet<>(helicopters.keySet()).forEach(this::removeHelicopter);
         seatOwners.clear();
-        clearSteerReflection();
     }
 
-    @SuppressWarnings("unchecked")
-    private void setupSteerReflection() {
-        try {
-            Class<?> clazz = Class.forName("com.destroystokyo.paper.event.player.PlayerSteerVehicleEvent");
-            if (!Event.class.isAssignableFrom(clazz)) {
-                return;
-            }
-            steerEventClass = (Class<? extends Event>) clazz;
-            steerGetPlayer = clazz.getMethod("getPlayer");
-            steerGetForward = clazz.getMethod("getForward");
-            steerGetSideways = clazz.getMethod("getSideways");
-            steerIsJumping = clazz.getMethod("isJumping");
-            steerIsSneaking = clazz.getMethod("isSneaking");
-            steerSetCancelled = clazz.getMethod("setCancelled", boolean.class);
+    private void loadWeaponConfig() {
+        reloadConfig();
+        FileConfiguration config = getConfig();
 
-            Bukkit.getPluginManager().registerEvent(steerEventClass, this, EventPriority.NORMAL,
-                    (listener, event) -> handleSteerVehicle(event), this);
-        } catch (ClassNotFoundException ex) {
-            getLogger().warning("PlayerSteerVehicleEvent недоступен. Вертолёт будет ограничен в управлении.");
-        } catch (NoSuchMethodException ex) {
-            clearSteerReflection();
-            getLogger().log(Level.SEVERE, "Не удалось инициализировать управление вертолётом", ex);
-        } catch (Throwable throwable) {
-            clearSteerReflection();
-            getLogger().log(Level.SEVERE, "Не удалось подключить управление вертолётом", throwable);
+        config.addDefault("weapons.projectile-lifetime-ticks", 60);
+        for (WeaponType type : WeaponType.values()) {
+            String base = "weapons." + type.getConfigKey();
+            config.addDefault(base + ".damage", type.getDefaultDamage());
+            config.addDefault(base + ".speed", type.getDefaultSpeed());
+        }
+
+        config.options().copyDefaults(true);
+        saveConfig();
+
+        projectileLifetimeTicks = Math.max(1, config.getInt("weapons.projectile-lifetime-ticks", 60));
+        weaponStats.clear();
+        for (WeaponType type : WeaponType.values()) {
+            String base = "weapons." + type.getConfigKey();
+            double damage = config.getDouble(base + ".damage", type.getDefaultDamage());
+            double speed = config.getDouble(base + ".speed", type.getDefaultSpeed());
+            weaponStats.put(type, new WeaponStats(damage, speed, type.getCooldownTicks(), type.getMaxAmmo()));
         }
     }
 
-    private void clearSteerReflection() {
-        steerEventClass = null;
-        steerGetPlayer = null;
-        steerGetForward = null;
-        steerGetSideways = null;
-        steerIsJumping = null;
-        steerIsSneaking = null;
-        steerSetCancelled = null;
+    private WeaponStats getStats(WeaponType type) {
+        WeaponStats stats = weaponStats.get(type);
+        if (stats == null) {
+            stats = new WeaponStats(type.getDefaultDamage(), type.getDefaultSpeed(), type.getCooldownTicks(), type.getMaxAmmo());
+            weaponStats.put(type, stats);
+        }
+        return stats;
     }
 
     @Override
@@ -470,37 +451,27 @@ public class TankPlugin extends JavaPlugin implements Listener, TabCompleter {
         }
     }
 
-    private void handleSteerVehicle(Event event) {
-        if (steerEventClass == null || !steerEventClass.isInstance(event)) {
+    @EventHandler
+    public void onPlayerSteerVehicle(PlayerSteerVehicleEvent event) {
+        Player player = event.getPlayer();
+        Helicopter helicopter = helicopters.get(player.getUniqueId());
+        if (helicopter == null || !helicopter.isDriver(player)) {
             return;
         }
-        try {
-            Object playerObject = steerGetPlayer.invoke(event);
-            if (!(playerObject instanceof Player)) {
-                return;
-            }
-            Player player = (Player) playerObject;
-            Helicopter helicopter = helicopters.get(player.getUniqueId());
-            if (helicopter == null || !helicopter.isDriver(player)) {
-                return;
-            }
 
-            ControlState state = controlStates.computeIfAbsent(player.getUniqueId(), ignored -> new ControlState());
-            float forward = ((Number) steerGetForward.invoke(event)).floatValue();
-            float sideways = ((Number) steerGetSideways.invoke(event)).floatValue();
-            boolean jumping = (Boolean) steerIsJumping.invoke(event);
-            boolean sneaking = (Boolean) steerIsSneaking.invoke(event);
-
-            state.forward = forward > 0.01F;
-            state.turnLeft = sideways < -0.01F;
-            state.turnRight = sideways > 0.01F;
-            state.up = jumping;
-            state.down = forward < -0.01F || sneaking;
-
-            steerSetCancelled.invoke(event, true);
-        } catch (IllegalAccessException | InvocationTargetException ex) {
-            getLogger().log(Level.SEVERE, "Ошибка обработки управления вертолётом", ex);
+        Entity vehicle = event.getVehicle();
+        if (vehicle == null || !vehicle.getUniqueId().equals(helicopter.getSeat().getUniqueId())) {
+            return;
         }
+
+        ControlState state = controlStates.computeIfAbsent(player.getUniqueId(), ignored -> new ControlState());
+        state.forward = event.getForward() > 0.01F;
+        state.turnLeft = event.getSideways() < -0.01F;
+        state.turnRight = event.getSideways() > 0.01F;
+        state.up = event.isJumping();
+        state.down = event.getForward() < -0.01F || event.isSneaking();
+
+        event.setCancelled(true);
     }
 
     private void updateEffects() {
@@ -663,7 +634,7 @@ public class TankPlugin extends JavaPlugin implements Listener, TabCompleter {
         if (!(event.getEntity() instanceof LivingEntity)) {
             return;
         }
-        event.setDamage(type.getDamage());
+        event.setDamage(getStats(type).getDamage());
     }
 
     @EventHandler
@@ -682,7 +653,9 @@ public class TankPlugin extends JavaPlugin implements Listener, TabCompleter {
         if (meta == null) {
             return;
         }
-        int clamped = Math.max(0, Math.min(ammo, type.getMaxAmmo()));
+        WeaponStats stats = getStats(type);
+        int maxAmmo = stats.getMaxAmmo();
+        int clamped = Math.max(0, Math.min(ammo, maxAmmo));
         PersistentDataContainer container = meta.getPersistentDataContainer();
         if (ammoKey != null) {
             container.set(ammoKey, PersistentDataType.INTEGER, clamped);
@@ -697,7 +670,7 @@ public class TankPlugin extends JavaPlugin implements Listener, TabCompleter {
                 updatedLore.add(line);
             }
         }
-        updatedLore.add(AMMO_LORE_PREFIX + ChatColor.YELLOW + clamped + ChatColor.GRAY + " / " + ChatColor.YELLOW + type.getMaxAmmo());
+        updatedLore.add(AMMO_LORE_PREFIX + ChatColor.YELLOW + clamped + ChatColor.GRAY + " / " + ChatColor.YELLOW + maxAmmo);
         meta.setLore(updatedLore);
         item.setItemMeta(meta);
     }
@@ -712,13 +685,15 @@ public class TankPlugin extends JavaPlugin implements Listener, TabCompleter {
         }
         PersistentDataContainer container = meta.getPersistentDataContainer();
         if (ammoKey == null || !container.has(ammoKey, PersistentDataType.INTEGER)) {
-            return type.getMaxAmmo();
+            return getStats(type).getMaxAmmo();
         }
         Integer stored = container.get(ammoKey, PersistentDataType.INTEGER);
         if (stored == null) {
-            return type.getMaxAmmo();
+            return getStats(type).getMaxAmmo();
         }
-        return Math.max(0, Math.min(stored, type.getMaxAmmo()));
+        WeaponStats stats = getStats(type);
+        int maxAmmo = stats.getMaxAmmo();
+        return Math.max(0, Math.min(stored, maxAmmo));
     }
 
     private void updateWeaponStack(Player player, EquipmentSlot slot, ItemStack item) {
@@ -806,16 +781,30 @@ public class TankPlugin extends JavaPlugin implements Listener, TabCompleter {
         }
 
         event.setCancelled(true);
+        WeaponStats stats = getStats(type);
         Snowball projectile = player.launchProjectile(Snowball.class);
         projectile.setGravity(false);
         projectile.setInvulnerable(true);
-        projectile.setVelocity(player.getLocation().getDirection().normalize().multiply(type.getSpeed()));
+        double speed = stats.getSpeed();
+        if (speed <= 0) {
+            speed = type.getDefaultSpeed();
+        }
+        projectile.setVelocity(player.getLocation().getDirection().normalize().multiply(speed));
         projectileTypes.put(projectile.getUniqueId(), type);
         setWeaponAmmo(item, type, ammo - 1);
         updateWeaponStack(player, slot, item);
-        player.setCooldown(item.getType(), type.getCooldownTicks());
+        int cooldown = Math.max(0, stats.getCooldownTicks());
+        if (cooldown > 0) {
+            player.setCooldown(item.getType(), cooldown);
+        }
 
-        Bukkit.getScheduler().runTaskLater(this, () -> projectileTypes.remove(projectile.getUniqueId()), 200L);
+        int lifetime = Math.max(1, projectileLifetimeTicks);
+        Bukkit.getScheduler().runTaskLater(this, () -> {
+            projectileTypes.remove(projectile.getUniqueId());
+            if (projectile.isValid()) {
+                projectile.remove();
+            }
+        }, lifetime);
     }
 
     @Override
@@ -1009,15 +998,51 @@ public class TankPlugin extends JavaPlugin implements Listener, TabCompleter {
     }
 
     private enum WeaponType {
-        RPD(RPD_DAMAGE, RPD_SPEED, RPD_COOLDOWN_TICKS, 100),
-        REMINGTON(REMINGTON_DAMAGE, REMINGTON_SPEED, REMINGTON_COOLDOWN_TICKS, 6);
+        RPD("rpd", 9.0D, 4.5D, 4, 100),
+        REMINGTON("remington", 14.0D, 3.0D, 16, 6);
 
+        private final String configKey;
+        private final double defaultDamage;
+        private final double defaultSpeed;
+        private final int cooldownTicks;
+        private final int maxAmmo;
+
+        WeaponType(String configKey, double defaultDamage, double defaultSpeed, int cooldownTicks, int maxAmmo) {
+            this.configKey = configKey;
+            this.defaultDamage = defaultDamage;
+            this.defaultSpeed = defaultSpeed;
+            this.cooldownTicks = cooldownTicks;
+            this.maxAmmo = maxAmmo;
+        }
+
+        String getConfigKey() {
+            return configKey;
+        }
+
+        double getDefaultDamage() {
+            return defaultDamage;
+        }
+
+        double getDefaultSpeed() {
+            return defaultSpeed;
+        }
+
+        int getCooldownTicks() {
+            return cooldownTicks;
+        }
+
+        int getMaxAmmo() {
+            return maxAmmo;
+        }
+    }
+
+    private static class WeaponStats {
         private final double damage;
         private final double speed;
         private final int cooldownTicks;
         private final int maxAmmo;
 
-        WeaponType(double damage, double speed, int cooldownTicks, int maxAmmo) {
+        WeaponStats(double damage, double speed, int cooldownTicks, int maxAmmo) {
             this.damage = damage;
             this.speed = speed;
             this.cooldownTicks = cooldownTicks;
