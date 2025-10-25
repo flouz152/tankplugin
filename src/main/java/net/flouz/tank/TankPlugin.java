@@ -15,11 +15,17 @@ import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.Action;
+import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryCloseEvent;
 import org.bukkit.event.inventory.InventoryOpenEvent;
+import org.bukkit.event.entity.EntityDamageByEntityEvent;
+import org.bukkit.event.entity.EntityPickupItemEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.player.PlayerItemHeldEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
+import org.bukkit.event.player.PlayerDropItemEvent;
+import org.bukkit.event.player.PlayerItemBreakEvent;
+import org.bukkit.event.player.PlayerSwapHandItemsEvent;
 import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.PlayerInventory;
@@ -40,8 +46,8 @@ public class TankPlugin extends JavaPlugin implements Listener, CommandExecutor,
 
     private NamespacedKey tankKey;
     private NamespacedKey medkitKey;
-    private BukkitTask effectTask;
     private final Map<UUID, BukkitTask> activeMedkits = new HashMap<>();
+    private final Random random = new Random();
 
     @Override
     public void onEnable() {
@@ -55,15 +61,12 @@ public class TankPlugin extends JavaPlugin implements Listener, CommandExecutor,
 
         Bukkit.getPluginManager().registerEvents(this, this);
 
-        this.effectTask = Bukkit.getScheduler().runTaskTimer(this, () ->
-                Bukkit.getOnlinePlayers().forEach(this::updateEffects), 20L, 20L);
+        Bukkit.getScheduler().runTask(this, () ->
+                Bukkit.getOnlinePlayers().forEach(this::updateEffects));
     }
 
     @Override
     public void onDisable() {
-        if (effectTask != null) {
-            effectTask.cancel();
-        }
         activeMedkits.values().forEach(BukkitTask::cancel);
         activeMedkits.clear();
     }
@@ -257,12 +260,15 @@ public class TankPlugin extends JavaPlugin implements Listener, CommandExecutor,
             player.removePotionEffect(PotionEffectType.SPEED);
         }
 
-        boolean swordInHand = isTankItem(inv.getItemInMainHand(), "sword") || isTankItem(inv.getItemInOffHand(), "sword");
-        if (swordInHand) {
+        if (hasTankSwordInHand(inv)) {
             ensureEffect(player, PotionEffectType.INCREASE_DAMAGE, 1);
         } else {
             player.removePotionEffect(PotionEffectType.INCREASE_DAMAGE);
         }
+    }
+
+    private boolean hasTankSwordInHand(PlayerInventory inv) {
+        return isTankItem(inv.getItemInMainHand(), "sword") || isTankItem(inv.getItemInOffHand(), "sword");
     }
 
     private void ensureEffect(Player player, PotionEffectType type, int amplifier) {
@@ -280,12 +286,21 @@ public class TankPlugin extends JavaPlugin implements Listener, CommandExecutor,
     }
 
     @EventHandler
+    public void onInventoryClick(InventoryClickEvent event) {
+        if (event.getWhoClicked() instanceof Player) {
+            Player player = (Player) event.getWhoClicked();
+            Bukkit.getScheduler().runTask(this, () -> updateEffects(player));
+        }
+    }
+
+    @EventHandler
     public void onInventoryOpen(InventoryOpenEvent event) {
         if (event.getPlayer() instanceof Player) {
             Player player = (Player) event.getPlayer();
             if (isTankItem(player.getInventory().getLeggings(), "legs")) {
                 ensureEffect(player, PotionEffectType.ABSORPTION, 0);
             }
+            Bukkit.getScheduler().runTask(this, () -> updateEffects(player));
         }
     }
 
@@ -296,6 +311,7 @@ public class TankPlugin extends JavaPlugin implements Listener, CommandExecutor,
             if (isTankItem(player.getInventory().getLeggings(), "legs")) {
                 ensureEffect(player, PotionEffectType.ABSORPTION, 0);
             }
+            Bukkit.getScheduler().runTask(this, () -> updateEffects(player));
         }
     }
 
@@ -308,6 +324,29 @@ public class TankPlugin extends JavaPlugin implements Listener, CommandExecutor,
             }
         }
         Bukkit.getScheduler().runTask(this, () -> updateEffects(player));
+    }
+
+    @EventHandler
+    public void onSwapHands(PlayerSwapHandItemsEvent event) {
+        Bukkit.getScheduler().runTask(this, () -> updateEffects(event.getPlayer()));
+    }
+
+    @EventHandler
+    public void onItemBreak(PlayerItemBreakEvent event) {
+        Bukkit.getScheduler().runTask(this, () -> updateEffects(event.getPlayer()));
+    }
+
+    @EventHandler
+    public void onItemDrop(PlayerDropItemEvent event) {
+        Bukkit.getScheduler().runTask(this, () -> updateEffects(event.getPlayer()));
+    }
+
+    @EventHandler
+    public void onItemPickup(EntityPickupItemEvent event) {
+        if (event.getEntity() instanceof Player) {
+            Player player = (Player) event.getEntity();
+            Bukkit.getScheduler().runTask(this, () -> updateEffects(player));
+        }
     }
 
     @EventHandler
@@ -361,6 +400,26 @@ public class TankPlugin extends JavaPlugin implements Listener, CommandExecutor,
 
         runnable.runTaskTimer(this, 0L, 20L);
         activeMedkits.put(player.getUniqueId(), runnable);
+    }
+
+    @EventHandler(ignoreCancelled = true)
+    public void onCriticalHit(EntityDamageByEntityEvent event) {
+        if (!(event.getDamager() instanceof Player)) {
+            return;
+        }
+
+        if (!event.isCritical()) {
+            return;
+        }
+
+        Player player = (Player) event.getDamager();
+        if (!hasTankSwordInHand(player.getInventory())) {
+            return;
+        }
+
+        if (random.nextDouble() < 0.15d) {
+            event.setDamage(event.getDamage() * 2.0d);
+        }
     }
 
     @Override
