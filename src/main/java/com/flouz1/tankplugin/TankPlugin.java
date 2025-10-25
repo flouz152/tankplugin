@@ -1,48 +1,28 @@
 package com.flouz1.tankplugin;
 
-import java.lang.reflect.Field;
-import java.lang.reflect.Method;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.EnumMap;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
-import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ThreadLocalRandom;
-import java.util.logging.Level;
 
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
-import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
 import org.bukkit.attribute.Attribute;
-import org.bukkit.attribute.AttributeInstance;
 import org.bukkit.command.Command;
+import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
 import org.bukkit.command.TabCompleter;
-import org.bukkit.entity.ArmorStand;
-import org.bukkit.entity.Entity;
-import org.bukkit.entity.EntityType;
-import org.bukkit.entity.LivingEntity;
+import org.bukkit.enchantments.Enchantment;
 import org.bukkit.entity.Player;
-import org.bukkit.entity.Projectile;
-import org.bukkit.entity.Snowball;
-import org.bukkit.event.Event;
 import org.bukkit.event.EventHandler;
-import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
-import org.bukkit.event.block.Action;
-import org.bukkit.event.entity.EntityDamageByEntityEvent;
-import org.bukkit.event.entity.ProjectileHitEvent;
-import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryCloseEvent;
-import org.bukkit.configuration.file.FileConfiguration;
-import org.bukkit.event.player.PlayerInteractAtEntityEvent;
+import org.bukkit.event.inventory.InventoryOpenEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.player.PlayerItemHeldEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
@@ -52,695 +32,80 @@ import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.PlayerInventory;
 import org.bukkit.inventory.meta.ItemMeta;
-import org.bukkit.enchantments.Enchantment;
 import org.bukkit.persistence.PersistentDataContainer;
 import org.bukkit.persistence.PersistentDataType;
-import org.bukkit.plugin.EventExecutor;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.potion.PotionEffect;
 import org.bukkit.potion.PotionEffectType;
 import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.scheduler.BukkitTask;
-import org.bukkit.util.Vector;
 
-import com.destroystokyo.paper.event.player.PlayerArmorChangeEvent;
+public class TankPlugin extends JavaPlugin implements Listener, CommandExecutor, TabCompleter {
 
-import io.netty.channel.Channel;
-import io.netty.channel.ChannelDuplexHandler;
-import io.netty.channel.ChannelHandlerContext;
+    private static final String HELMET_NAME = "ТАНК ШЛЕМ - М";
+    private static final String CHESTPLATE_NAME = "ТАНК НАГРУДНИК - М";
+    private static final String LEGGINGS_NAME = "ТАНК ПОНОЖИ - М";
+    private static final String BOOTS_NAME = "ТАНК БОТИНКИ - М";
+    private static final String SWORD_NAME = "Облученная Мачете - М";
+    private static final String MEDKIT_NAME = "Аптека";
 
-public class TankPlugin extends JavaPlugin implements Listener, TabCompleter {
-
-    private static final String HELMET_NAME = ChatColor.GOLD + "ТАНК ШЛЕМ" + ChatColor.DARK_GRAY + " • " + ChatColor.YELLOW + "<М>";
-    private static final String CHESTPLATE_NAME = ChatColor.GOLD + "ТАНК НАГРУДНИК" + ChatColor.DARK_GRAY + " • " + ChatColor.YELLOW + "<М>";
-    private static final String LEGGINGS_NAME = ChatColor.GOLD + "ТАНК ПОНОЖИ" + ChatColor.DARK_GRAY + " • " + ChatColor.YELLOW + "<М>";
-    private static final String BOOTS_NAME = ChatColor.GOLD + "ТАНК БОТИНКИ" + ChatColor.DARK_GRAY + " • " + ChatColor.YELLOW + "<М>";
-    private static final String SWORD_NAME = ChatColor.DARK_AQUA + "Облучённая Мачете" + ChatColor.DARK_GRAY + " • " + ChatColor.RED + "<М>";
-    private static final String MEDKIT_NAME = ChatColor.GREEN + "Медкомплект \"Аптека\"";
-    private static final String RPD_NAME = ChatColor.DARK_RED + "РПД ПРЕМУМ" + ChatColor.DARK_GRAY + " • " + ChatColor.RED + "<100>";
-    private static final String REMINGTON_NAME = ChatColor.GOLD + "Ремингтон 870" + ChatColor.DARK_GRAY + " • " + ChatColor.GREEN + "<6>";
-    private static final String AMMO_LORE_PREFIX = ChatColor.GRAY + "Боезапас: ";
-    private static final String AMMO_STRIPPED_PREFIX = "Боезапас:";
-
-    private static final List<String> HELMET_LORE = createLore(
-            ChatColor.GRAY + "Категория: " + ChatColor.YELLOW + "Шлем",
-            ChatColor.DARK_PURPLE + "Сканер ночного видения"
-    );
-    private static final List<String> CHESTPLATE_LORE = createLore(
-            ChatColor.GRAY + "Категория: " + ChatColor.YELLOW + "Броня",
-            ChatColor.LIGHT_PURPLE + "Поддержка нанорегенерации"
-    );
-    private static final List<String> LEGGINGS_LORE = createLore(
-            ChatColor.GRAY + "Категория: " + ChatColor.YELLOW + "Броня",
-            ChatColor.AQUA + "Экранирование удара: " + ChatColor.GOLD + "+2 золотых сердца",
-            ChatColor.DARK_GRAY + "Активируется при манёврах"
-    );
-    private static final List<String> BOOTS_LORE = createLore(
-            ChatColor.GRAY + "Категория: " + ChatColor.YELLOW + "Броня",
-            ChatColor.GREEN + "Усиленные сервоприводы скорости"
-    );
-    private static final List<String> SWORD_LORE = createLore(
-            ChatColor.GRAY + "Тип: " + ChatColor.RED + "Тактическое мачете",
-            ChatColor.GRAY + "Эффект: " + ChatColor.DARK_AQUA + "Сила II",
-            ChatColor.DARK_GRAY + "Хранить при себе для активации"
-    );
-    private static final List<String> MEDKIT_LORE = createLore(
-            ChatColor.GRAY + "Тип: " + ChatColor.GREEN + "Медицинский комплект",
-            ChatColor.GRAY + "Применение: " + ChatColor.WHITE + "ПКМ",
-            ChatColor.GRAY + "Требование: " + ChatColor.YELLOW + "Отсутствие полного HP",
-            ChatColor.DARK_GREEN + "Запускает отсчёт и восстанавливает здоровье"
-    );
-    private static final List<String> RPD_LORE = createLore(
-            ChatColor.GRAY + "C418 - stal",
-            "",
-            ChatColor.RED + "Урон: " + ChatColor.GOLD + "■■■■■■■■■■" + ChatColor.DARK_GRAY + "■■",
-            ChatColor.RED + "Скорострельность: " + ChatColor.GOLD + "■■■■■■■■■■■■",
-            ChatColor.RED + "Точность: " + ChatColor.GOLD + "■■■■■■■■" + ChatColor.DARK_GRAY + "■■■■",
-            ChatColor.RED + "Дальность: " + ChatColor.GOLD + "■■■■■■■■■" + ChatColor.DARK_GRAY + "■■■",
-            ChatColor.RED + "Мобильность: " + ChatColor.GOLD + "■■■■■■" + ChatColor.DARK_GRAY + "■■■■■",
-            "",
-            ChatColor.GRAY + "Тип: " + ChatColor.RED + "Пулемёт",
-            ChatColor.GRAY + "Магазин: " + ChatColor.YELLOW + "100",
-            ChatColor.GRAY + "Боеприпасы: " + ChatColor.YELLOW + "7,62×39 мм",
-            ChatColor.GRAY + "Перезарядка: " + ChatColor.YELLOW + "4 сек.",
-            "",
-            ChatColor.GOLD + "Модификации:",
-            ChatColor.YELLOW + "↑ " + ChatColor.GRAY + "УВЕЛИЧЕН УРОН",
-            ChatColor.YELLOW + "↑ " + ChatColor.GRAY + "УВЕЛИЧЕННАЯ ТОЧНОСТЬ",
-            ChatColor.YELLOW + "↑ " + ChatColor.GRAY + "УВЕЛИЧЕННАЯ СКОРОСТРЕЛЬНОСТЬ",
-            ChatColor.YELLOW + "↓ " + ChatColor.GRAY + "УМЕНЬШЕНА ОТДАЧА"
-    );
-    private static final List<String> REMINGTON_LORE = createLore(
-            ChatColor.GRAY + "C418 - blocks",
-            "",
-            ChatColor.RED + "Урон: " + ChatColor.GOLD + "■■■■■■■■■" + ChatColor.DARK_GRAY + "■■■",
-            ChatColor.RED + "Скорострельность: " + ChatColor.GOLD + "■■■" + ChatColor.DARK_GRAY + "■■■■■■■",
-            ChatColor.RED + "Точность: " + ChatColor.GOLD + "■■■■■■■" + ChatColor.DARK_GRAY + "■■■",
-            ChatColor.RED + "Дальность: " + ChatColor.GOLD + "■■■■■" + ChatColor.DARK_GRAY + "■■■■",
-            ChatColor.RED + "Мобильность: " + ChatColor.GOLD + "■■■■■■■■" + ChatColor.DARK_GRAY + "■■",
-            "",
-            ChatColor.GRAY + "Тип: " + ChatColor.RED + "Помповое ружьё",
-            ChatColor.GRAY + "Магазин: " + ChatColor.YELLOW + "6",
-            ChatColor.GRAY + "Боеприпасы: " + ChatColor.YELLOW + "12×70 мм",
-            ChatColor.GRAY + "Перезарядка: " + ChatColor.YELLOW + "0.75 сек."
-    );
-
+    private NamespacedKey itemKey;
     private BukkitTask effectTask;
-    private NamespacedKey ammoKey;
-    private int projectileLifetimeTicks = 60;
-    private final Set<UUID> activeMedkits = new HashSet<>();
-    private final Map<UUID, MedkitSession> medkitSessions = new HashMap<>();
-    private final Map<UUID, Helicopter> helicopters = new HashMap<>();
-    private final Map<UUID, UUID> seatOwners = new HashMap<>();
-    private final Map<UUID, ControlState> controlStates = new ConcurrentHashMap<>();
-    private final Map<UUID, WeaponType> projectileTypes = new HashMap<>();
-    private final Map<WeaponType, WeaponStats> weaponStats = new EnumMap<>(WeaponType.class);
-    private double macheteDoubleCritChance = 0.11D;
-    private Method damageCriticalMethod;
-
-    private boolean packetSteerFallback;
-    private Class<?> packetSteerClass;
-    private Method steerForwardMethod;
-    private Method steerSidewaysMethod;
-    private Method steerJumpMethod;
-    private Method steerSneakMethod;
-    private Field steerForwardField;
-    private Field steerSidewaysField;
-    private Field steerJumpField;
-    private Field steerSneakField;
-    private final Map<UUID, String> steerHandlerNames = new ConcurrentHashMap<>();
+    private final Map<UUID, BukkitTask> medkitTasks = new HashMap<>();
+    private final Map<ArmorPiece, PotionEffectType> armorEffects = new EnumMap<>(ArmorPiece.class);
 
     @Override
     public void onEnable() {
+        this.itemKey = new NamespacedKey(this, "custom-item");
+
+        armorEffects.put(ArmorPiece.HELMET, PotionEffectType.NIGHT_VISION);
+        armorEffects.put(ArmorPiece.CHESTPLATE, PotionEffectType.REGENERATION);
+        armorEffects.put(ArmorPiece.BOOTS, PotionEffectType.SPEED);
+
         Bukkit.getPluginManager().registerEvents(this, this);
+
         if (getCommand("flouz1") != null) {
+            getCommand("flouz1").setExecutor(this);
             getCommand("flouz1").setTabCompleter(this);
         }
-        saveDefaultConfig();
-        loadWeaponConfig();
-        ammoKey = new NamespacedKey(this, "ammo");
-        effectTask = Bukkit.getScheduler().runTaskTimer(this, this::updateEffects, 1L, 1L);
-        initCriticalReflection();
-        registerSteerListener();
-        if (packetSteerFallback) {
-            Bukkit.getScheduler().runTask(this, () -> Bukkit.getOnlinePlayers().forEach(this::injectSteerListener));
-        }
+
+        this.effectTask = new BukkitRunnable() {
+            @Override
+            public void run() {
+                Bukkit.getOnlinePlayers().forEach(TankPlugin.this::updatePlayerEffects);
+            }
+        }.runTaskTimer(this, 20L, 40L);
     }
 
     @Override
     public void onDisable() {
         if (effectTask != null) {
             effectTask.cancel();
-            effectTask = null;
         }
-        new HashSet<>(helicopters.keySet()).forEach(this::removeHelicopter);
-        seatOwners.clear();
-        if (packetSteerFallback) {
-            for (Player player : Bukkit.getOnlinePlayers()) {
-                uninjectSteerListener(player);
-            }
-            steerHandlerNames.clear();
-        }
-    }
-
-    private void registerSteerListener() {
-        if (tryRegisterPaperSteerListener()) {
-            return;
-        }
-        if (initPacketSteerAccess()) {
-            packetSteerFallback = true;
-            getLogger().info("PlayerSteerVehicleEvent не найден. Используется перехват пакетов для управления вертолётом.");
-        } else {
-            getLogger().severe("Не удалось инициализировать управление вертолёта: PacketPlayInSteerVehicle недоступен.");
-        }
-    }
-
-    private boolean tryRegisterPaperSteerListener() {
-        try {
-            @SuppressWarnings("unchecked")
-            Class<? extends Event> steerClass = (Class<? extends Event>) Class
-                    .forName("com.destroystokyo.paper.event.player.PlayerSteerVehicleEvent");
-
-            Method getPlayer = steerClass.getMethod("getPlayer");
-            Method getVehicle = steerClass.getMethod("getVehicle");
-            Method getForward = steerClass.getMethod("getForward");
-            Method getSideways = steerClass.getMethod("getSideways");
-            Method cancel = steerClass.getMethod("setCancelled", boolean.class);
-
-            Method isJump = findOptionalBooleanAccessor(steerClass, "isJumping", "isJump");
-            Method isSneak = findOptionalBooleanAccessor(steerClass, "isSneaking", "isSneak");
-
-            Listener listener = new Listener() {
-            };
-            EventExecutor executor = (ignored, event) -> {
-                if (!steerClass.isInstance(event)) {
-                    return;
-                }
-
-                try {
-                    Player player = (Player) getPlayer.invoke(event);
-                    Entity vehicle = (Entity) getVehicle.invoke(event);
-                    float forward = ((Number) getForward.invoke(event)).floatValue();
-                    float sideways = ((Number) getSideways.invoke(event)).floatValue();
-                    boolean jumping = invokeBoolean(event, isJump);
-                    boolean sneaking = invokeBoolean(event, isSneak);
-
-                    if (handleHelicopterSteer(player, vehicle, forward, sideways, jumping, sneaking)) {
-                        cancel.invoke(event, true);
-                    }
-                } catch (ReflectiveOperationException ex) {
-                    getLogger().log(Level.WARNING, "Не удалось обработать управление вертолёта", ex);
-                }
-            };
-
-            Bukkit.getPluginManager().registerEvent(steerClass, listener, EventPriority.NORMAL, executor, this, true);
-            return true;
-        } catch (ClassNotFoundException ex) {
-            return false;
-        } catch (ReflectiveOperationException ex) {
-            getLogger().log(Level.SEVERE, "Не удалось инициализировать управление вертолёта", ex);
-            return false;
-        }
-    }
-
-    private boolean initPacketSteerAccess() {
-        try {
-            packetSteerClass = getNmsClass("PacketPlayInSteerVehicle",
-                    "net.minecraft.network.protocol.game.PacketPlayInSteerVehicle");
-            if (packetSteerClass == null) {
-                return false;
-            }
-
-            steerSidewaysMethod = resolveMethod(packetSteerClass, "a", "getSideways");
-            steerForwardMethod = resolveMethod(packetSteerClass, "b", "getForward");
-            steerJumpMethod = resolveMethod(packetSteerClass, "c", "isJumping", "isJump");
-            steerSneakMethod = resolveMethod(packetSteerClass, "d", "isSneaking", "isDismount", "isSneak");
-
-            steerSidewaysField = resolveField(packetSteerClass, float.class, "a", "sideways");
-            steerForwardField = resolveField(packetSteerClass, float.class, "b", "forward");
-            steerJumpField = resolveField(packetSteerClass, boolean.class, "c", "jumping");
-            steerSneakField = resolveField(packetSteerClass, boolean.class, "d", "dismount", "sneaking");
-            return true;
-        } catch (ReflectiveOperationException ex) {
-            getLogger().log(Level.SEVERE, "Не удалось подготовить пакетное управление вертолёта", ex);
-            return false;
-        }
-    }
-
-    private Class<?> getNmsClass(String legacyName, String modernName) {
-        String serverPackage = Bukkit.getServer().getClass().getPackage().getName();
-        String version = serverPackage.substring(serverPackage.lastIndexOf('.') + 1);
-        List<String> candidates = new ArrayList<>();
-        candidates.add("net.minecraft.server." + version + "." + legacyName);
-        candidates.add(modernName);
-        for (String name : candidates) {
-            try {
-                return Class.forName(name);
-            } catch (ClassNotFoundException ignored) {
-            }
-        }
-        return null;
-    }
-
-    private Method resolveMethod(Class<?> owner, String... names) throws NoSuchMethodException {
-        for (String name : names) {
-            try {
-                Method method = owner.getMethod(name);
-                method.setAccessible(true);
-                return method;
-            } catch (NoSuchMethodException ignored) {
-            }
-        }
-        throw new NoSuchMethodException(Arrays.toString(names));
-    }
-
-    private Field resolveField(Class<?> owner, Class<?> type, String... names) {
-        for (String name : names) {
-            try {
-                Field field = owner.getDeclaredField(name);
-                if (field.getType() == type) {
-                    field.setAccessible(true);
-                    return field;
-                }
-            } catch (NoSuchFieldException ignored) {
-            }
-        }
-        return null;
-    }
-
-    private void injectSteerListener(Player player) {
-        if (!packetSteerFallback || packetSteerClass == null) {
-            return;
-        }
-        UUID uuid = player.getUniqueId();
-        if (steerHandlerNames.containsKey(uuid)) {
-            return;
-        }
-        Channel channel = getPlayerChannel(player);
-        if (channel == null) {
-            return;
-        }
-        final String handlerName = "tankplugin_steer_" + uuid;
-        ChannelDuplexHandler handler = new ChannelDuplexHandler() {
-            @Override
-            public void channelRead(ChannelHandlerContext ctx, Object msg) throws Exception {
-                if (packetSteerClass.isInstance(msg)) {
-                    float forward = readFloat(msg, steerForwardMethod, steerForwardField);
-                    float sideways = readFloat(msg, steerSidewaysMethod, steerSidewaysField);
-                    boolean jumping = readBoolean(msg, steerJumpMethod, steerJumpField);
-                    boolean sneaking = readBoolean(msg, steerSneakMethod, steerSneakField);
-
-                    if (handleHelicopterSteer(player, player.getVehicle(), forward, sideways, jumping, sneaking)) {
-                        zeroSteerPacket(msg);
-                    }
-                }
-                super.channelRead(ctx, msg);
-            }
-        };
-
-        final Channel injectionChannel = channel;
-        channel.eventLoop().execute(() -> {
-            if (injectionChannel.pipeline().get(handlerName) == null) {
-                injectionChannel.pipeline().addBefore("packet_handler", handlerName, handler);
-                steerHandlerNames.put(uuid, handlerName);
-            }
-        });
-    }
-
-    private void uninjectSteerListener(Player player) {
-        if (!packetSteerFallback) {
-            return;
-        }
-        UUID uuid = player.getUniqueId();
-        String existingName = steerHandlerNames.remove(uuid);
-        final String handlerName = existingName != null ? existingName : "tankplugin_steer_" + uuid;
-        Channel channel = getPlayerChannel(player);
-        if (channel == null) {
-            return;
-        }
-        final Channel removalChannel = channel;
-        channel.eventLoop().execute(() -> {
-            if (removalChannel.pipeline().get(handlerName) != null) {
-                removalChannel.pipeline().remove(handlerName);
-            }
-        });
-    }
-
-    private Channel getPlayerChannel(Player player) {
-        try {
-            Object craftPlayer = player;
-            Method getHandle = craftPlayer.getClass().getMethod("getHandle");
-            Object entityPlayer = getHandle.invoke(craftPlayer);
-            Field connectionField = entityPlayer.getClass().getField("playerConnection");
-            Object playerConnection = connectionField.get(entityPlayer);
-            Field networkField = playerConnection.getClass().getField("networkManager");
-            Object networkManager = networkField.get(playerConnection);
-            Field channelField = null;
-            Class<?> networkClass = networkManager.getClass();
-            for (Field field : networkClass.getFields()) {
-                if (Channel.class.isAssignableFrom(field.getType())) {
-                    channelField = field;
-                    break;
-                }
-            }
-            if (channelField == null) {
-                channelField = networkClass.getDeclaredField("channel");
-            }
-            channelField.setAccessible(true);
-            return (Channel) channelField.get(networkManager);
-        } catch (ReflectiveOperationException ex) {
-            getLogger().log(Level.WARNING, "Не удалось получить сетевой канал игрока", ex);
-            return null;
-        }
-    }
-
-    private float readFloat(Object packet, Method method, Field field) {
-        try {
-            if (method != null) {
-                return ((Number) method.invoke(packet)).floatValue();
-            }
-        } catch (ReflectiveOperationException ignored) {
-        }
-        if (field != null) {
-            try {
-                return field.getFloat(packet);
-            } catch (IllegalAccessException ignored) {
-            }
-        }
-        return 0F;
-    }
-
-    private boolean readBoolean(Object packet, Method method, Field field) {
-        try {
-            if (method != null) {
-                Object result = method.invoke(packet);
-                if (result instanceof Boolean) {
-                    return (Boolean) result;
-                }
-                if (result instanceof Number) {
-                    return ((Number) result).intValue() != 0;
-                }
-            }
-        } catch (ReflectiveOperationException ignored) {
-        }
-        if (field != null) {
-            try {
-                return field.getBoolean(packet);
-            } catch (IllegalAccessException ignored) {
-            }
-        }
-        return false;
-    }
-
-    private void zeroSteerPacket(Object packet) {
-        trySetFloat(packet, steerForwardField, 0F);
-        trySetFloat(packet, steerSidewaysField, 0F);
-        trySetBoolean(packet, steerJumpField, false);
-        trySetBoolean(packet, steerSneakField, false);
-    }
-
-    private void trySetFloat(Object packet, Field field, float value) {
-        if (field == null) {
-            return;
-        }
-        try {
-            field.setFloat(packet, value);
-        } catch (IllegalAccessException ignored) {
-        }
-    }
-
-    private void trySetBoolean(Object packet, Field field, boolean value) {
-        if (field == null) {
-            return;
-        }
-        try {
-            field.setBoolean(packet, value);
-        } catch (IllegalAccessException ignored) {
-        }
-    }
-
-    private Method findOptionalBooleanAccessor(Class<?> type, String... names) {
-        for (String name : names) {
-            try {
-                return type.getMethod(name);
-            } catch (NoSuchMethodException ignored) {
-            }
-        }
-        return null;
-    }
-
-    private void initCriticalReflection() {
-        try {
-            damageCriticalMethod = EntityDamageByEntityEvent.class.getMethod("isCritical");
-            damageCriticalMethod.setAccessible(true);
-        } catch (NoSuchMethodException ignored) {
-            damageCriticalMethod = null;
-        }
-    }
-
-    private boolean invokeBoolean(Object instance, Method method) {
-        if (method == null) {
-            return false;
-        }
-        try {
-            Object result = method.invoke(instance);
-            return result instanceof Boolean ? (Boolean) result : Boolean.TRUE.equals(result);
-        } catch (ReflectiveOperationException ex) {
-            getLogger().warning("Не удалось получить состояние управления вертолётом: " + ex.getMessage());
-            return false;
-        }
-    }
-
-    private void loadWeaponConfig() {
-        reloadConfig();
-        FileConfiguration config = getConfig();
-
-        config.addDefault("weapons.projectile-lifetime-ticks", 60);
-        for (WeaponType type : WeaponType.values()) {
-            String base = "weapons." + type.getConfigKey();
-            config.addDefault(base + ".damage", type.getDefaultDamage());
-            config.addDefault(base + ".speed", type.getDefaultSpeed());
-        }
-        config.addDefault("luckydayz.machete.double-crit-chance", 0.11D);
-
-        config.options().copyDefaults(true);
-        saveConfig();
-
-        projectileLifetimeTicks = Math.max(1, config.getInt("weapons.projectile-lifetime-ticks", 60));
-        macheteDoubleCritChance = config.getDouble("luckydayz.machete.double-crit-chance", 0.11D);
-        if (!Double.isFinite(macheteDoubleCritChance)) {
-            macheteDoubleCritChance = 0.11D;
-        }
-        macheteDoubleCritChance = Math.max(0D, Math.min(1D, macheteDoubleCritChance));
-        weaponStats.clear();
-        for (WeaponType type : WeaponType.values()) {
-            String base = "weapons." + type.getConfigKey();
-            double damage = config.getDouble(base + ".damage", type.getDefaultDamage());
-            double speed = config.getDouble(base + ".speed", type.getDefaultSpeed());
-            weaponStats.put(type, new WeaponStats(damage, speed, type.getCooldownTicks(), type.getMaxAmmo()));
-        }
-    }
-
-    private WeaponStats getStats(WeaponType type) {
-        WeaponStats stats = weaponStats.get(type);
-        if (stats == null) {
-            stats = new WeaponStats(type.getDefaultDamage(), type.getDefaultSpeed(), type.getCooldownTicks(), type.getMaxAmmo());
-            weaponStats.put(type, stats);
-        }
-        return stats;
-    }
-
-    @Override
-    public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
-        if (!(sender instanceof Player)) {
-            sender.sendMessage(ChatColor.RED + "Команду может выполнять только игрок.");
-            return true;
-        }
-
-        Player player = (Player) sender;
-        if (args.length == 0) {
-            sendCommandOverview(player);
-            return true;
-        }
-
-        if (!args[0].equalsIgnoreCase("com") || args.length < 2) {
-            sendCommandOverview(player);
-            return true;
-        }
-
-        if (args[1].equalsIgnoreCase("tank")) {
-            if (args.length < 3) {
-                player.sendMessage(ChatColor.YELLOW + "Укажите элемент сета: helmet, chestplate, leggings, boots.");
-                return true;
-            }
-            switch (args[2].toLowerCase()) {
-                case "helmet":
-                    giveItem(player, createStyledItem(Material.DIAMOND_HELMET, HELMET_NAME, HELMET_LORE));
-                    player.sendMessage(ChatColor.GREEN + "Вы получили " + HELMET_NAME + ChatColor.GREEN + ".");
-                    return true;
-                case "chestplate":
-                    giveItem(player, createStyledItem(Material.DIAMOND_CHESTPLATE, CHESTPLATE_NAME, CHESTPLATE_LORE));
-                    player.sendMessage(ChatColor.GREEN + "Вы получили " + CHESTPLATE_NAME + ChatColor.GREEN + ".");
-                    return true;
-                case "leggings":
-                    giveItem(player, createStyledItem(Material.DIAMOND_LEGGINGS, LEGGINGS_NAME, LEGGINGS_LORE));
-                    player.sendMessage(ChatColor.GREEN + "Вы получили " + LEGGINGS_NAME + ChatColor.GREEN + ".");
-                    return true;
-                case "boots":
-                    giveItem(player, createStyledItem(Material.DIAMOND_BOOTS, BOOTS_NAME, BOOTS_LORE));
-                    player.sendMessage(ChatColor.GREEN + "Вы получили " + BOOTS_NAME + ChatColor.GREEN + ".");
-                    return true;
-                default:
-                    player.sendMessage(ChatColor.RED + "Неизвестный предмет танка.");
-                    return true;
-            }
-        }
-
-        if (args[1].equalsIgnoreCase("luckydayz")) {
-            if (args.length < 3) {
-                player.sendMessage(ChatColor.YELLOW + "Укажите предмет: machete, medkit, rpd, remington, helicopter.");
-                return true;
-            }
-
-            switch (args[2].toLowerCase()) {
-                case "machete":
-                    giveItem(player, createStyledItem(Material.DIAMOND_SWORD, SWORD_NAME, SWORD_LORE));
-                    player.sendMessage(ChatColor.GREEN + "Вы получили " + SWORD_NAME + ChatColor.GREEN + ".");
-                    return true;
-                case "medkit":
-                    giveItem(player, createStyledItem(Material.GLOWSTONE_DUST, MEDKIT_NAME, MEDKIT_LORE));
-                    player.sendMessage(ChatColor.GREEN + "Вы получили " + MEDKIT_NAME + ChatColor.GREEN + ".");
-                    return true;
-                case "rpd":
-                    ItemStack rpd = createStyledItem(Material.MUSIC_DISC_STAL, RPD_NAME, RPD_LORE);
-                    setWeaponAmmo(rpd, WeaponType.RPD, WeaponType.RPD.getMaxAmmo());
-                    giveItem(player, rpd);
-                    player.sendMessage(ChatColor.GREEN + "Вы получили " + RPD_NAME + ChatColor.GREEN + ".");
-                    return true;
-                case "remington":
-                    ItemStack remington = createStyledItem(Material.MUSIC_DISC_BLOCKS, REMINGTON_NAME, REMINGTON_LORE);
-                    setWeaponAmmo(remington, WeaponType.REMINGTON, WeaponType.REMINGTON.getMaxAmmo());
-                    giveItem(player, remington);
-                    player.sendMessage(ChatColor.GREEN + "Вы получили " + REMINGTON_NAME + ChatColor.GREEN + ".");
-                    return true;
-                case "helicopter":
-                    if (args.length >= 4 && args[3].equalsIgnoreCase("speed")) {
-                        if (args.length == 5) {
-                            try {
-                                double speed = Double.parseDouble(args[4]);
-                                if (!Double.isFinite(speed) || speed <= 0 || speed > 2) {
-                                    player.sendMessage(ChatColor.RED + "Скорость должна быть в диапазоне (0; 2].");
-                                    return true;
-                                }
-                                Helicopter helicopter = helicopters.get(player.getUniqueId());
-                                if (helicopter == null) {
-                                    player.sendMessage(ChatColor.RED + "Сначала вызовите вертолет.");
-                                    return true;
-                                }
-                                helicopter.setSpeed(speed);
-                                player.sendMessage(ChatColor.GREEN + "Скорость вертолета установлена на " + speed + ".");
-                                return true;
-                            } catch (NumberFormatException ex) {
-                                player.sendMessage(ChatColor.RED + "Скорость должна быть числом.");
-                                return true;
-                            }
-                        }
-                        player.sendMessage(ChatColor.YELLOW + "Использование: /flouz1 com luckydayz helicopter speed <значение>.");
-                        return true;
-                    }
-                    spawnHelicopter(player);
-                    return true;
-                default:
-                    player.sendMessage(ChatColor.RED + "Неизвестная команда luckydayz.");
-                    return true;
-            }
-        }
-
-        sendCommandOverview(player);
-        return true;
-    }
-
-    private void giveItem(Player player, ItemStack item) {
-        player.getInventory().addItem(item);
-    }
-
-    private ItemStack createStyledItem(Material material, String name, List<String> lore) {
-        ItemStack stack = new ItemStack(material);
-        ItemMeta meta = stack.getItemMeta();
-        if (meta != null) {
-            meta.setDisplayName(name);
-            if (lore != null) {
-                meta.setLore(new ArrayList<>(lore));
-            }
-            if (material == Material.DIAMOND_SWORD && SWORD_NAME.equals(name)) {
-                meta.addEnchant(Enchantment.DAMAGE_ALL, 7, true);
-            }
-            stack.setItemMeta(meta);
-        }
-        return stack;
-    }
-
-    private static List<String> createLore(String... lines) {
-        List<String> lore = new ArrayList<>();
-        for (String line : lines) {
-            lore.add(line);
-        }
-        return lore;
-    }
-
-    private void sendCommandOverview(Player player) {
-        player.sendMessage(ChatColor.AQUA + "Доступные команды:");
-        player.sendMessage(ChatColor.GRAY + "/flouz1 com tank helmet" + ChatColor.DARK_GRAY + " — " + ChatColor.YELLOW + ChatColor.stripColor(HELMET_NAME));
-        player.sendMessage(ChatColor.GRAY + "/flouz1 com tank chestplate" + ChatColor.DARK_GRAY + " — " + ChatColor.YELLOW + ChatColor.stripColor(CHESTPLATE_NAME));
-        player.sendMessage(ChatColor.GRAY + "/flouz1 com tank leggings" + ChatColor.DARK_GRAY + " — " + ChatColor.YELLOW + ChatColor.stripColor(LEGGINGS_NAME));
-        player.sendMessage(ChatColor.GRAY + "/flouz1 com tank boots" + ChatColor.DARK_GRAY + " — " + ChatColor.YELLOW + ChatColor.stripColor(BOOTS_NAME));
-        player.sendMessage(ChatColor.GRAY + "/flouz1 com luckydayz machete" + ChatColor.DARK_GRAY + " — " + ChatColor.YELLOW + ChatColor.stripColor(SWORD_NAME));
-        player.sendMessage(ChatColor.GRAY + "/flouz1 com luckydayz medkit" + ChatColor.DARK_GRAY + " — " + ChatColor.YELLOW + ChatColor.stripColor(MEDKIT_NAME));
-        player.sendMessage(ChatColor.GRAY + "/flouz1 com luckydayz rpd" + ChatColor.DARK_GRAY + " — " + ChatColor.YELLOW + ChatColor.stripColor(RPD_NAME));
-        player.sendMessage(ChatColor.GRAY + "/flouz1 com luckydayz remington" + ChatColor.DARK_GRAY + " — " + ChatColor.YELLOW + ChatColor.stripColor(REMINGTON_NAME));
-        player.sendMessage(ChatColor.GRAY + "/flouz1 com luckydayz helicopter" + ChatColor.DARK_GRAY + " — " + ChatColor.YELLOW + "личный вертолёт");
-        player.sendMessage(ChatColor.GRAY + "/flouz1 com luckydayz helicopter speed <0.1-2.0>" + ChatColor.DARK_GRAY + " — " + ChatColor.YELLOW + "настройка скорости вертолёта");
+        medkitTasks.values().forEach(BukkitTask::cancel);
+        medkitTasks.clear();
     }
 
     @EventHandler
     public void onPlayerJoin(PlayerJoinEvent event) {
-        Player player = event.getPlayer();
-        updateEffectsFor(player);
-        Bukkit.getScheduler().runTask(this, () -> updateEffectsFor(player));
-        Bukkit.getScheduler().runTask(this, () -> applyAbsorptionIfWearing(player));
-        if (packetSteerFallback) {
-            Bukkit.getScheduler().runTaskLater(this, () -> injectSteerListener(player), 1L);
-        }
+        updatePlayerEffects(event.getPlayer());
     }
 
     @EventHandler
     public void onPlayerQuit(PlayerQuitEvent event) {
-        Player player = event.getPlayer();
-        activeMedkits.remove(player.getUniqueId());
-        removeHelicopter(player.getUniqueId());
-        MedkitSession session = medkitSessions.remove(player.getUniqueId());
-        if (session != null) {
-            session.restore(player);
-        }
-        if (packetSteerFallback) {
-            uninjectSteerListener(player);
+        BukkitTask task = medkitTasks.remove(event.getPlayer().getUniqueId());
+        if (task != null) {
+            task.cancel();
         }
     }
 
     @EventHandler
-    public void onPlayerItemHeld(PlayerItemHeldEvent event) {
-        int newSlot = event.getNewSlot();
-        Player player = event.getPlayer();
-        updateEffectsFor(player);
-        if ((newSlot == 0 || newSlot == 2) && isWearingTankLeggings(player)) {
-            applyAbsorption(player);
-        }
-    }
-
-    @EventHandler
-    public void onInventoryClick(InventoryClickEvent event) {
-        if (event.getWhoClicked() instanceof Player) {
-            Bukkit.getScheduler().runTask(this, () -> updateEffectsFor((Player) event.getWhoClicked()));
+    public void onInventoryOpen(InventoryOpenEvent event) {
+        if (event.getPlayer() instanceof Player) {
+            Player player = (Player) event.getPlayer();
+            if (hasCustomItem(player.getInventory().getLeggings(), CustomItemType.TANK_LEGGINGS)) {
+                applyAbsorption(player);
+            }
         }
     }
 
@@ -748,791 +113,328 @@ public class TankPlugin extends JavaPlugin implements Listener, TabCompleter {
     public void onInventoryClose(InventoryCloseEvent event) {
         if (event.getPlayer() instanceof Player) {
             Player player = (Player) event.getPlayer();
-            updateEffectsFor(player);
-            if (isWearingTankLeggings(player)) {
-                Bukkit.getScheduler().runTask(this, () -> applyAbsorptionIfWearing(player));
+            if (hasCustomItem(player.getInventory().getLeggings(), CustomItemType.TANK_LEGGINGS)) {
+                applyAbsorption(player);
             }
         }
     }
 
     @EventHandler
-    public void onArmorChange(PlayerArmorChangeEvent event) {
-        updateEffectsFor(event.getPlayer());
-    }
-
-    @EventHandler
-    public void onSwapItems(PlayerSwapHandItemsEvent event) {
-        updateEffectsFor(event.getPlayer());
-    }
-
-    @EventHandler
-    public void onPlayerInteract(PlayerInteractEvent event) {
-        EquipmentSlot handUsed = event.getHand();
-        if (handUsed != EquipmentSlot.HAND && handUsed != EquipmentSlot.OFF_HAND) {
-            return;
+    public void onItemHeld(PlayerItemHeldEvent event) {
+        Player player = event.getPlayer();
+        int previousSlot = event.getPreviousSlot();
+        int newSlot = event.getNewSlot();
+        if (hasCustomItem(player.getInventory().getLeggings(), CustomItemType.TANK_LEGGINGS)) {
+            if (isSlotOneThree(previousSlot) || isSlotOneThree(newSlot)) {
+                applyAbsorption(player);
+            }
         }
-        Action action = event.getAction();
-        if (action != Action.RIGHT_CLICK_AIR && action != Action.RIGHT_CLICK_BLOCK) {
+        Bukkit.getScheduler().runTaskLater(this, () -> updatePlayerEffects(player), 1L);
+    }
+
+    @EventHandler
+    public void onSwapHandItems(PlayerSwapHandItemsEvent event) {
+        Player player = event.getPlayer();
+        Bukkit.getScheduler().runTaskLater(this, () -> updatePlayerEffects(player), 1L);
+    }
+
+    @EventHandler
+    public void onMedkitUse(PlayerInteractEvent event) {
+        if (!(event.getAction().name().contains("RIGHT_CLICK"))) {
             return;
         }
         ItemStack item = event.getItem();
-        Player player = event.getPlayer();
-
-        if (isNamedItem(item, Material.GLOWSTONE_DUST, MEDKIT_NAME)) {
-            handleMedkitUse(event, player, handUsed);
+        if (!hasCustomItem(item, CustomItemType.MEDKIT)) {
             return;
         }
 
-        if (isNamedItem(item, Material.MUSIC_DISC_STAL, RPD_NAME)) {
-            handleWeaponFire(event, player, item, WeaponType.RPD);
-            return;
-        }
-
-        if (isNamedItem(item, Material.MUSIC_DISC_BLOCKS, REMINGTON_NAME)) {
-            handleWeaponFire(event, player, item, WeaponType.REMINGTON);
-        }
-    }
-
-    @EventHandler
-    public void onPlayerInteractEntity(PlayerInteractAtEntityEvent event) {
-        Entity entity = event.getRightClicked();
-        UUID ownerId = seatOwners.get(entity.getUniqueId());
-        if (ownerId == null) {
-            return;
-        }
         event.setCancelled(true);
         Player player = event.getPlayer();
-        if (!player.getUniqueId().equals(ownerId)) {
+        UUID uuid = player.getUniqueId();
+
+        if (medkitTasks.containsKey(uuid)) {
             return;
         }
-        entity.addPassenger(player);
-        Helicopter helicopter = helicopters.get(ownerId);
-        if (helicopter != null) {
-            helicopter.start();
-        }
+
+        consumeItem(event.getHand(), player);
+        startMedkitCountdown(player);
     }
 
-    private boolean handleHelicopterSteer(Player player, Entity vehicle, float forward, float sideways,
-            boolean jumping, boolean sneaking) {
-        if (player == null) {
-            return false;
-        }
+    private void startMedkitCountdown(Player player) {
+        UUID uuid = player.getUniqueId();
+        BukkitRunnable runnable = new BukkitRunnable() {
+            private int seconds = 8;
 
-        Helicopter helicopter = helicopters.get(player.getUniqueId());
-        if (helicopter == null || !helicopter.isDriver(player)) {
-            return false;
-        }
+            @Override
+            public void run() {
+                player.sendMessage(ChatColor.WHITE.toString() + ChatColor.BOLD + "Аптека отхилит вас через " + seconds);
+                if (seconds == 0) {
+                    double maxHealth = player.getAttribute(Attribute.GENERIC_MAX_HEALTH).getValue();
+                    player.setHealth(Math.min(maxHealth, maxHealth));
+                    cancel();
+                    return;
+                }
+                seconds--;
+            }
 
-        if (vehicle == null || !vehicle.getUniqueId().equals(helicopter.getSeat().getUniqueId())) {
-            return false;
-        }
+            @Override
+            public synchronized void cancel() throws IllegalStateException {
+                super.cancel();
+                medkitTasks.remove(uuid);
+            }
+        };
 
-        ControlState state = controlStates.computeIfAbsent(player.getUniqueId(), ignored -> new ControlState());
-        state.forward = forward > 0.01F;
-        state.turnLeft = sideways < -0.01F;
-        state.turnRight = sideways > 0.01F;
-        state.up = jumping;
-        state.down = forward < -0.01F || sneaking;
-        return true;
+        BukkitTask task = runnable.runTaskTimer(this, 0L, 20L);
+        medkitTasks.put(uuid, task);
     }
 
-    private void updateEffects() {
-        for (Player player : Bukkit.getOnlinePlayers()) {
-            updateEffectsFor(player);
-        }
-    }
-
-    private void updateEffectsFor(Player player) {
+    private void updatePlayerEffects(Player player) {
         PlayerInventory inventory = player.getInventory();
 
-        if (isNamedItem(inventory.getHelmet(), Material.DIAMOND_HELMET, HELMET_NAME)) {
-            applyEffect(player, PotionEffectType.NIGHT_VISION, 0);
-        } else {
-            removeEffect(player, PotionEffectType.NIGHT_VISION);
+        for (Map.Entry<ArmorPiece, PotionEffectType> entry : armorEffects.entrySet()) {
+            ArmorPiece piece = entry.getKey();
+            PotionEffectType effect = entry.getValue();
+            ItemStack item = piece.getItem(inventory);
+            boolean hasItem = hasCustomItem(item, piece.getItemType());
+            if (hasItem) {
+                applyEffect(player, effect, piece.getAmplifier());
+            } else {
+                player.removePotionEffect(effect);
+            }
         }
 
-        if (isNamedItem(inventory.getChestplate(), Material.DIAMOND_CHESTPLATE, CHESTPLATE_NAME)) {
-            applyEffect(player, PotionEffectType.REGENERATION, 0);
-        } else {
-            removeEffect(player, PotionEffectType.REGENERATION);
+        boolean hasLeggings = hasCustomItem(inventory.getLeggings(), CustomItemType.TANK_LEGGINGS);
+        if (!hasLeggings) {
+            player.removePotionEffect(PotionEffectType.ABSORPTION);
         }
 
-        if (!isWearingTankLeggings(player)) {
-            removeEffect(player, PotionEffectType.ABSORPTION);
-        }
-
-        if (isNamedItem(inventory.getBoots(), Material.DIAMOND_BOOTS, BOOTS_NAME)) {
-            applyEffect(player, PotionEffectType.SPEED, 0);
-        } else {
-            removeEffect(player, PotionEffectType.SPEED);
-        }
-
-        ItemStack main = inventory.getItemInMainHand();
-        ItemStack off = inventory.getItemInOffHand();
-        if (isNamedItem(main, Material.DIAMOND_SWORD, SWORD_NAME) || isNamedItem(off, Material.DIAMOND_SWORD, SWORD_NAME)) {
+        boolean holdingSword = hasCustomItem(inventory.getItemInMainHand(), CustomItemType.MACHETE)
+                || hasCustomItem(inventory.getItemInOffHand(), CustomItemType.MACHETE);
+        if (holdingSword) {
             applyEffect(player, PotionEffectType.INCREASE_DAMAGE, 1);
         } else {
-            removeEffect(player, PotionEffectType.INCREASE_DAMAGE);
+            player.removePotionEffect(PotionEffectType.INCREASE_DAMAGE);
         }
-    }
-
-    private boolean isWearingTankLeggings(Player player) {
-        return isNamedItem(player.getInventory().getLeggings(), Material.DIAMOND_LEGGINGS, LEGGINGS_NAME);
     }
 
     private void applyEffect(Player player, PotionEffectType type, int amplifier) {
-        PotionEffect effect = new PotionEffect(type, Integer.MAX_VALUE, amplifier, true, false, false);
-        player.addPotionEffect(effect, true);
+        PotionEffect current = player.getPotionEffect(type);
+        int duration = 20 * 15;
+        if (current == null || current.getDuration() <= 20 || current.getAmplifier() != amplifier) {
+            player.addPotionEffect(new PotionEffect(type, duration, amplifier, true, false, false));
+        }
     }
 
     private void applyAbsorption(Player player) {
-        PotionEffect effect = new PotionEffect(PotionEffectType.ABSORPTION, Integer.MAX_VALUE, 0, true, false, false);
-        player.addPotionEffect(effect, true);
+        player.addPotionEffect(new PotionEffect(PotionEffectType.ABSORPTION, 20 * 60, 0, true, false, false));
     }
 
-    private void applyAbsorptionIfWearing(Player player) {
-        if (isWearingTankLeggings(player)) {
-            applyAbsorption(player);
-        }
+    private boolean isSlotOneThree(int slot) {
+        return slot == 0 || slot == 2;
     }
 
-    private void removeEffect(Player player, PotionEffectType type) {
-        if (player.hasPotionEffect(type)) {
-            player.removePotionEffect(type);
-        }
-    }
-
-    private boolean isNamedItem(ItemStack stack, Material material, String name) {
-        if (stack == null || stack.getType() != material) {
-            return false;
-        }
-        ItemMeta meta = stack.getItemMeta();
-        return meta != null && name.equals(meta.getDisplayName());
-    }
-
-    private void handleMacheteDamage(EntityDamageByEntityEvent event, Player attacker) {
-        if (macheteDoubleCritChance <= 0D) {
+    private void consumeItem(EquipmentSlot hand, Player player) {
+        if (hand == null) {
             return;
         }
-        if (!(event.getEntity() instanceof Player)) {
-            return;
-        }
-        if (!isNamedItem(attacker.getInventory().getItemInMainHand(), Material.DIAMOND_SWORD, SWORD_NAME)) {
-            return;
-        }
-        if (!isCriticalHit(event, attacker)) {
-            return;
-        }
-        if (ThreadLocalRandom.current().nextDouble() >= macheteDoubleCritChance) {
-            return;
-        }
-
-        event.setDamage(event.getDamage() * 2D);
-        attacker.addPotionEffect(new PotionEffect(PotionEffectType.INVISIBILITY, 60, 0, false, false, false));
-        attacker.sendMessage(ChatColor.DARK_AQUA + "X2 крит активирован! " + ChatColor.GRAY + "Вы невидимы на 3 секунды.");
-    }
-
-    private boolean isCriticalHit(EntityDamageByEntityEvent event, Player attacker) {
-        if (damageCriticalMethod != null) {
-            try {
-                Object result = damageCriticalMethod.invoke(event);
-                if (result instanceof Boolean) {
-                    return (Boolean) result;
-                }
-            } catch (ReflectiveOperationException ignored) {
-                damageCriticalMethod = null;
-            }
-        }
-        return attacker.getAttackCooldown() >= 1F
-                && attacker.getFallDistance() > 0.0F
-                && !attacker.isOnGround()
-                && !attacker.isInsideVehicle()
-                && !isClimbing(attacker)
-                && !attacker.isInWater()
-                && !attacker.hasPotionEffect(PotionEffectType.BLINDNESS);
-    }
-
-    private boolean isClimbing(Player player) {
-        Material blockType = player.getLocation().getBlock().getType();
-        if (isClimbable(blockType)) {
-            return true;
-        }
-        Material eyeBlockType = player.getEyeLocation().getBlock().getType();
-        return isClimbable(eyeBlockType);
-    }
-
-    private boolean isClimbable(Material material) {
-        switch (material) {
-            case LADDER:
-            case VINE:
-            case TWISTING_VINES:
-            case WEEPING_VINES:
-            case WEEPING_VINES_PLANT:
-            case TWISTING_VINES_PLANT:
-            case SCAFFOLDING:
-                return true;
-            default:
-                return false;
-        }
-    }
-
-    private void spawnHelicopter(Player player) {
-        UUID uuid = player.getUniqueId();
-        removeHelicopter(uuid);
-
-        Location base = player.getLocation().add(player.getLocation().getDirection().setY(0).normalize().multiply(2));
-        base.setY(base.getY() + 0.5);
-
-        ArmorStand seat = (ArmorStand) player.getWorld().spawnEntity(base.clone(), EntityType.ARMOR_STAND);
-        seat.setVisible(false);
-        seat.setGravity(false);
-        seat.setInvulnerable(true);
-        seat.setSmall(false);
-        seat.setCustomNameVisible(false);
-        seat.getScoreboardTags().add("tank-helicopter-seat");
-
-        List<ArmorStand> parts = new ArrayList<>();
-        parts.add(createPart(base.clone(), Material.GREEN_CONCRETE, new Vector(0, -0.5, 0)));
-        parts.add(createPart(base.clone().add(0, 0.6, 0), Material.IRON_TRAPDOOR, new Vector(0, 0, 0)));
-        parts.add(createPart(base.clone().add(0, -0.2, 0.8), Material.BLACK_CONCRETE, new Vector(0, 0, 0)));
-        parts.add(createPart(base.clone().add(0, -0.2, -0.9), Material.GRAY_CONCRETE, new Vector(0, 0, 0)));
-        parts.add(createPart(base.clone().add(0.9, -0.2, -0.1), Material.GRAY_CONCRETE, new Vector(0, 0, 0)));
-        parts.add(createPart(base.clone().add(-0.9, -0.2, -0.1), Material.GRAY_CONCRETE, new Vector(0, 0, 0)));
-        parts.add(createPart(base.clone().add(0, 0.9, 0), Material.BLACK_CONCRETE, new Vector(0, 0, 0)));
-        parts.add(createPart(base.clone().add(0, 1.2, 0), Material.IRON_BARS, new Vector(0, 0, 0)));
-
-        Helicopter helicopter = new Helicopter(this, seat, parts, player.getUniqueId());
-        helicopters.put(uuid, helicopter);
-        seatOwners.put(seat.getUniqueId(), uuid);
-        controlStates.put(uuid, new ControlState());
-        helicopter.start();
-        player.sendMessage(ChatColor.GREEN + "Вы вызвали вертолет.");
-    }
-
-    private ArmorStand createPart(Location location, Material helmetMaterial, Vector offset) {
-        Location spawnLoc = location.clone().add(offset);
-        ArmorStand stand = (ArmorStand) location.getWorld().spawnEntity(spawnLoc, EntityType.ARMOR_STAND);
-        stand.setVisible(false);
-        stand.setMarker(true);
-        stand.setGravity(false);
-        stand.setInvulnerable(true);
-        stand.setCustomNameVisible(false);
-        stand.setHelmet(new ItemStack(helmetMaterial));
-        stand.getScoreboardTags().add("tank-helicopter-part");
-        return stand;
-    }
-
-    private void removeHelicopter(UUID owner) {
-        Helicopter helicopter = helicopters.remove(owner);
-        if (helicopter == null) {
-            return;
-        }
-        helicopter.stop();
-        ArmorStand seat = helicopter.getSeat();
-        seatOwners.remove(seat.getUniqueId());
-        seat.remove();
-        for (ArmorStand part : helicopter.getParts()) {
-            part.remove();
-        }
-        controlStates.remove(owner);
-    }
-
-    private void cleanupMedkit(UUID uuid, Player player) {
-        activeMedkits.remove(uuid);
-        MedkitSession session = medkitSessions.remove(uuid);
-        if (session != null && player.isOnline()) {
-            session.restore(player);
-        }
-    }
-
-    @EventHandler
-    public void onProjectileDamage(EntityDamageByEntityEvent event) {
-        Entity damager = event.getDamager();
-        if (damager instanceof Player) {
-            Player player = (Player) damager;
-            if (!event.isCancelled()) {
-                handleMacheteDamage(event, player);
-            }
-        }
-
-        if (event.isCancelled()) {
-            return;
-        }
-
-        if (!(damager instanceof Projectile)) {
-            return;
-        }
-        Projectile projectile = (Projectile) damager;
-        WeaponType type = projectileTypes.remove(projectile.getUniqueId());
-        if (type == null) {
-            return;
-        }
-        if (!(projectile.getShooter() instanceof Player)) {
-            return;
-        }
-        if (!(event.getEntity() instanceof LivingEntity)) {
-            return;
-        }
-        event.setDamage(getStats(type).getDamage());
-    }
-
-    @EventHandler
-    public void onProjectileHit(ProjectileHitEvent event) {
-        Projectile projectile = event.getEntity();
-        if (projectileTypes.remove(projectile.getUniqueId()) != null) {
-            projectile.remove();
-        }
-    }
-
-    private void setWeaponAmmo(ItemStack item, WeaponType type, int ammo) {
-        if (item == null || type == null) {
-            return;
-        }
-        ItemMeta meta = item.getItemMeta();
-        if (meta == null) {
-            return;
-        }
-        WeaponStats stats = getStats(type);
-        int maxAmmo = stats.getMaxAmmo();
-        int clamped = Math.max(0, Math.min(ammo, maxAmmo));
-        PersistentDataContainer container = meta.getPersistentDataContainer();
-        if (ammoKey != null) {
-            container.set(ammoKey, PersistentDataType.INTEGER, clamped);
-        }
-        List<String> lore = meta.getLore();
-        List<String> updatedLore = new ArrayList<>();
-        if (lore != null) {
-            for (String line : lore) {
-                if (line != null && ChatColor.stripColor(line).startsWith(AMMO_STRIPPED_PREFIX)) {
-                    continue;
-                }
-                updatedLore.add(line);
-            }
-        }
-        updatedLore.add(AMMO_LORE_PREFIX + ChatColor.YELLOW + clamped + ChatColor.GRAY + " / " + ChatColor.YELLOW + maxAmmo);
-        meta.setLore(updatedLore);
-        item.setItemMeta(meta);
-    }
-
-    private int getWeaponAmmo(ItemStack item, WeaponType type) {
-        if (item == null || type == null) {
-            return 0;
-        }
-        ItemMeta meta = item.getItemMeta();
-        if (meta == null) {
-            return 0;
-        }
-        PersistentDataContainer container = meta.getPersistentDataContainer();
-        if (ammoKey == null || !container.has(ammoKey, PersistentDataType.INTEGER)) {
-            return getStats(type).getMaxAmmo();
-        }
-        Integer stored = container.get(ammoKey, PersistentDataType.INTEGER);
-        if (stored == null) {
-            return getStats(type).getMaxAmmo();
-        }
-        WeaponStats stats = getStats(type);
-        int maxAmmo = stats.getMaxAmmo();
-        return Math.max(0, Math.min(stored, maxAmmo));
-    }
-
-    private void updateWeaponStack(Player player, EquipmentSlot slot, ItemStack item) {
-        if (slot == EquipmentSlot.OFF_HAND) {
-            player.getInventory().setItemInOffHand(item);
-        } else {
-            player.getInventory().setItemInMainHand(item);
-        }
-    }
-
-    private void handleMedkitUse(PlayerInteractEvent event, Player player, EquipmentSlot handUsed) {
-        UUID uuid = player.getUniqueId();
-        if (!activeMedkits.add(uuid)) {
-            return;
-        }
-        event.setCancelled(true);
-
-        AttributeInstance attribute = player.getAttribute(Attribute.GENERIC_MAX_HEALTH);
-        double maxHealth = attribute != null ? attribute.getValue() : player.getMaxHealth();
-        if (player.getHealth() >= maxHealth) {
-            player.sendMessage(ChatColor.YELLOW + "У вас полное здоровье. Аптечка не требуется.");
-            activeMedkits.remove(uuid);
-            return;
-        }
-
         PlayerInventory inventory = player.getInventory();
-        ItemStack hand = event.getItem();
-        if (hand != null) {
-            int amount = hand.getAmount();
-            if (amount > 1) {
-                hand.setAmount(amount - 1);
-            } else if (handUsed == EquipmentSlot.HAND) {
+        ItemStack stack = hand == EquipmentSlot.HAND ? inventory.getItemInMainHand()
+                : inventory.getItemInOffHand();
+        if (stack == null || stack.getType() == Material.AIR) {
+            return;
+        }
+        if (stack.getAmount() <= 1) {
+            if (hand == EquipmentSlot.HAND) {
                 inventory.setItemInMainHand(null);
             } else {
                 inventory.setItemInOffHand(null);
             }
+        } else {
+            stack.setAmount(stack.getAmount() - 1);
         }
-
-        MedkitSession session = new MedkitSession(player.getLevel(), player.getExp(), player.getTotalExperience());
-        medkitSessions.put(uuid, session);
-
-        new BukkitRunnable() {
-            int counter = 8;
-            int progressStep = 0;
-
-            @Override
-            public void run() {
-                if (!player.isOnline()) {
-                    cancel();
-                    cleanupMedkit(uuid, player);
-                    return;
-                }
-
-                progressStep = Math.min(progressStep + 1, 10);
-                session.applyProgress(player, progressStep);
-                player.sendMessage(ChatColor.WHITE.toString() + ChatColor.BOLD + "Аптека отхилит вас через " + counter);
-
-                if (counter <= 0) {
-                    double healedMax = attribute != null ? attribute.getValue() : player.getMaxHealth();
-                    player.setHealth(healedMax);
-                    cancel();
-                    Bukkit.getScheduler().runTask(TankPlugin.this, () -> cleanupMedkit(uuid, player));
-                    return;
-                }
-
-                counter--;
-            }
-        }.runTaskTimer(this, 0L, 20L);
     }
 
-    private void handleWeaponFire(PlayerInteractEvent event, Player player, ItemStack item, WeaponType type) {
-        EquipmentSlot slot = event.getHand();
-        if (slot != EquipmentSlot.HAND && slot != EquipmentSlot.OFF_HAND) {
-            return;
+    private boolean hasCustomItem(ItemStack stack, CustomItemType type) {
+        if (stack == null || stack.getType() == Material.AIR) {
+            return false;
         }
+        ItemMeta meta = stack.getItemMeta();
+        if (meta == null) {
+            return false;
+        }
+        PersistentDataContainer container = meta.getPersistentDataContainer();
+        String value = container.get(itemKey, PersistentDataType.STRING);
+        return type.getKey().equals(value);
+    }
 
-        if (player.getCooldown(item.getType()) > 0) {
-            return;
-        }
-
-        int ammo = getWeaponAmmo(item, type);
-        if (ammo <= 0) {
-            player.sendMessage(ChatColor.RED + "Боезапас исчерпан. Требуется пополнение патронов.");
-            return;
-        }
-
-        event.setCancelled(true);
-        WeaponStats stats = getStats(type);
-        Snowball projectile = player.launchProjectile(Snowball.class);
-        projectile.setGravity(false);
-        projectile.setInvulnerable(true);
-        double speed = stats.getSpeed();
-        if (speed <= 0) {
-            speed = type.getDefaultSpeed();
-        }
-        projectile.setVelocity(player.getLocation().getDirection().normalize().multiply(speed));
-        projectileTypes.put(projectile.getUniqueId(), type);
-        setWeaponAmmo(item, type, ammo - 1);
-        updateWeaponStack(player, slot, item);
-        int cooldown = Math.max(0, stats.getCooldownTicks());
-        if (cooldown > 0) {
-            player.setCooldown(item.getType(), cooldown);
-        }
-
-        int lifetime = Math.max(1, projectileLifetimeTicks);
-        Bukkit.getScheduler().runTaskLater(this, () -> {
-            projectileTypes.remove(projectile.getUniqueId());
-            if (projectile.isValid()) {
-                projectile.remove();
+    private ItemStack createItem(CustomItemType type) {
+        ItemStack stack = new ItemStack(type.getMaterial());
+        ItemMeta meta = stack.getItemMeta();
+        if (meta != null) {
+            meta.setDisplayName(type.getDisplayName());
+            meta.getPersistentDataContainer().set(itemKey, PersistentDataType.STRING, type.getKey());
+            if (type == CustomItemType.MACHETE) {
+                meta.addEnchant(Enchantment.DAMAGE_ALL, 3, true);
             }
-        }, lifetime);
+            stack.setItemMeta(meta);
+        }
+        return stack;
+    }
+
+    @Override
+    public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
+        if (!(sender instanceof Player)) {
+            sender.sendMessage(ChatColor.RED + "Команда доступна только игрокам.");
+            return true;
+        }
+        Player player = (Player) sender;
+        if (args.length < 3) {
+            player.sendMessage(ChatColor.RED + "Использование: /flouz1 com tank|luckydayz <тип>");
+            return true;
+        }
+
+        String root = args[0].toLowerCase(Locale.ROOT);
+        if (!"com".equals(root)) {
+            player.sendMessage(ChatColor.RED + "Неизвестная подкоманда.");
+            return true;
+        }
+
+        String category = args[1].toLowerCase(Locale.ROOT);
+        String itemId = args[2].toLowerCase(Locale.ROOT);
+
+        CustomItemType type = null;
+        if ("tank".equals(category)) {
+            switch (itemId) {
+                case "helmet":
+                    type = CustomItemType.TANK_HELMET;
+                    break;
+                case "bodyarmor":
+                    type = CustomItemType.TANK_CHESTPLATE;
+                    break;
+                case "lenghtarmor":
+                    type = CustomItemType.TANK_LEGGINGS;
+                    break;
+                case "boottarmor":
+                    type = CustomItemType.TANK_BOOTS;
+                    break;
+                default:
+                    break;
+            }
+        } else if ("luckydayz".equals(category)) {
+            switch (itemId) {
+                case "obla":
+                    type = CustomItemType.MACHETE;
+                    break;
+                case "apteka":
+                    type = CustomItemType.MEDKIT;
+                    break;
+                default:
+                    break;
+            }
+        }
+
+        if (type == null) {
+            player.sendMessage(ChatColor.RED + "Неизвестный предмет.");
+            return true;
+        }
+
+        ItemStack item = createItem(type);
+        player.getInventory().addItem(item);
+        player.sendMessage(ChatColor.GREEN + "Вы получили предмет: " + type.getDisplayName());
+        return true;
     }
 
     @Override
     public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
-        if (!command.getName().equalsIgnoreCase("flouz1")) {
-            return null;
-        }
-
-        List<String> suggestions = new ArrayList<>();
-        if (args.length == 1) {
-            suggestions.add("com");
-            return filterPrefix(suggestions, args[0]);
-        }
-
-        if (args.length == 2 && args[0].equalsIgnoreCase("com")) {
-            suggestions.add("tank");
-            suggestions.add("luckydayz");
-            return filterPrefix(suggestions, args[1]);
-        }
-
-        if (args[0].equalsIgnoreCase("com") && args[1].equalsIgnoreCase("tank")) {
-            if (args.length == 3) {
-                suggestions.add("helmet");
-                suggestions.add("chestplate");
-                suggestions.add("leggings");
-                suggestions.add("boots");
-                return filterPrefix(suggestions, args[2]);
-            }
-            return suggestions;
-        }
-
-        if (args[0].equalsIgnoreCase("com") && args[1].equalsIgnoreCase("luckydayz")) {
-            if (args.length == 3) {
-                suggestions.add("machete");
-                suggestions.add("medkit");
-                suggestions.add("rpd");
-                suggestions.add("remington");
-                suggestions.add("helicopter");
-                return filterPrefix(suggestions, args[2]);
-            }
-            if (args.length == 4 && args[2].equalsIgnoreCase("helicopter")) {
-                suggestions.add("speed");
-                return filterPrefix(suggestions, args[3]);
-            }
-            if (args.length == 5 && args[2].equalsIgnoreCase("helicopter") && args[3].equalsIgnoreCase("speed")) {
-                suggestions.add("0.4");
-                suggestions.add("0.8");
-                suggestions.add("1.0");
-                suggestions.add("1.5");
-                suggestions.add("2.0");
-                return filterPrefix(suggestions, args[4]);
-            }
-        }
-        return suggestions;
-    }
-
-    private List<String> filterPrefix(List<String> options, String current) {
-        String lower = current == null ? "" : current.toLowerCase();
         List<String> result = new ArrayList<>();
-        for (String option : options) {
-            if (option.toLowerCase().startsWith(lower)) {
-                result.add(option);
+        if (args.length == 1) {
+            result.add("com");
+        } else if (args.length == 2) {
+            if ("com".equalsIgnoreCase(args[0])) {
+                result.add("tank");
+                result.add("luckydayz");
+            }
+        } else if (args.length == 3) {
+            if ("com".equalsIgnoreCase(args[0])) {
+                if ("tank".equalsIgnoreCase(args[1])) {
+                    result.add("helmet");
+                    result.add("bodyarmor");
+                    result.add("lenghtarmor");
+                    result.add("boottarmor");
+                } else if ("luckydayz".equalsIgnoreCase(args[1])) {
+                    result.add("obla");
+                    result.add("apteka");
+                }
             }
         }
         return result;
     }
 
-    private static class Helicopter {
-        private static final float TURN_STEP = 4.0F;
+    private enum CustomItemType {
+        TANK_HELMET("tank-helmet", Material.DIAMOND_HELMET, HELMET_NAME),
+        TANK_CHESTPLATE("tank-chestplate", Material.DIAMOND_CHESTPLATE, CHESTPLATE_NAME),
+        TANK_LEGGINGS("tank-leggings", Material.DIAMOND_LEGGINGS, LEGGINGS_NAME),
+        TANK_BOOTS("tank-boots", Material.DIAMOND_BOOTS, BOOTS_NAME),
+        MACHETE("irradiated-machete", Material.DIAMOND_SWORD, SWORD_NAME),
+        MEDKIT("medkit", Material.GLOWSTONE_DUST, MEDKIT_NAME);
 
-        private final TankPlugin plugin;
-        private final ArmorStand seat;
-        private final List<ArmorStand> parts;
-        private final UUID owner;
-        private double speed = 0.4D;
-        private BukkitRunnable task;
+        private final String key;
+        private final Material material;
+        private final String displayName;
 
-        Helicopter(TankPlugin plugin, ArmorStand seat, List<ArmorStand> parts, UUID owner) {
-            this.plugin = plugin;
-            this.seat = seat;
-            this.parts = parts;
-            this.owner = owner;
+        CustomItemType(String key, Material material, String displayName) {
+            this.key = key;
+            this.material = material;
+            this.displayName = displayName;
         }
 
-        ArmorStand getSeat() {
-            return seat;
+        public String getKey() {
+            return key;
         }
 
-        List<ArmorStand> getParts() {
-            return parts;
+        public Material getMaterial() {
+            return material;
         }
 
-        boolean isDriver(Player player) {
-            return seat.getPassengers().contains(player);
-        }
-
-        void start() {
-            if (task != null) {
-                return;
-            }
-            task = new BukkitRunnable() {
-                @Override
-                public void run() {
-                    Player player = Bukkit.getPlayer(owner);
-                    if (player == null || !player.isOnline()) {
-                        stop();
-                        plugin.removeHelicopter(owner);
-                        return;
-                    }
-                    if (!seat.getPassengers().contains(player)) {
-                        return;
-                    }
-                    ControlState state = plugin.controlStates.computeIfAbsent(owner, ignored -> new ControlState());
-                    Location seatLocation = seat.getLocation();
-                    float yaw = seatLocation.getYaw();
-                    if (state.turnLeft) {
-                        yaw -= TURN_STEP;
-                    }
-                    if (state.turnRight) {
-                        yaw += TURN_STEP;
-                    }
-                    if (yaw > 180.0F) {
-                        yaw -= 360.0F;
-                    } else if (yaw < -180.0F) {
-                        yaw += 360.0F;
-                    }
-                    seatLocation.setYaw(yaw);
-                    seat.teleport(seatLocation);
-
-                    Location playerLocation = player.getLocation();
-                    player.setRotation(yaw, playerLocation.getPitch());
-
-                    double radians = Math.toRadians(yaw);
-                    Vector move = new Vector(0, 0, 0);
-                    Vector forward = new Vector(-Math.sin(radians), 0, Math.cos(radians));
-
-                    if (state.forward) {
-                        move.add(forward);
-                    }
-                    if (state.up) {
-                        move.setY(move.getY() + 1);
-                    }
-                    if (state.down) {
-                        move.setY(move.getY() - 1);
-                    }
-
-                    if (move.lengthSquared() > 0) {
-                        move.normalize().multiply(speed / 5.0D);
-                        Location newLocation = seat.getLocation().add(move);
-                        seat.teleport(newLocation);
-                        syncParts(move);
-                    }
-                    state.clear();
-                }
-            };
-            task.runTaskTimer(plugin, 0L, 1L);
-        }
-
-        void stop() {
-            if (task != null) {
-                task.cancel();
-                task = null;
-            }
-        }
-
-        void syncParts(Vector delta) {
-            for (ArmorStand part : parts) {
-                part.teleport(part.getLocation().add(delta));
-            }
-        }
-
-        void setSpeed(double speed) {
-            this.speed = speed;
+        public String getDisplayName() {
+            return displayName;
         }
     }
 
-    private static class ControlState {
-        boolean forward;
-        boolean turnLeft;
-        boolean turnRight;
-        boolean up;
-        boolean down;
+    private enum ArmorPiece {
+        HELMET(CustomItemType.TANK_HELMET, EquipmentSlot.HEAD, 0),
+        CHESTPLATE(CustomItemType.TANK_CHESTPLATE, EquipmentSlot.CHEST, 0),
+        BOOTS(CustomItemType.TANK_BOOTS, EquipmentSlot.FEET, 0);
 
-        void clear() {
-            forward = false;
-            turnLeft = false;
-            turnRight = false;
-            up = false;
-            down = false;
-        }
-    }
+        private final CustomItemType itemType;
+        private final EquipmentSlot slot;
+        private final int amplifier;
 
-    private enum WeaponType {
-        RPD("rpd", 9.0D, 4.5D, 4, 100),
-        REMINGTON("remington", 14.0D, 3.0D, 16, 6);
-
-        private final String configKey;
-        private final double defaultDamage;
-        private final double defaultSpeed;
-        private final int cooldownTicks;
-        private final int maxAmmo;
-
-        WeaponType(String configKey, double defaultDamage, double defaultSpeed, int cooldownTicks, int maxAmmo) {
-            this.configKey = configKey;
-            this.defaultDamage = defaultDamage;
-            this.defaultSpeed = defaultSpeed;
-            this.cooldownTicks = cooldownTicks;
-            this.maxAmmo = maxAmmo;
+        ArmorPiece(CustomItemType itemType, EquipmentSlot slot, int amplifier) {
+            this.itemType = itemType;
+            this.slot = slot;
+            this.amplifier = amplifier;
         }
 
-        String getConfigKey() {
-            return configKey;
+        public CustomItemType getItemType() {
+            return itemType;
         }
 
-        double getDefaultDamage() {
-            return defaultDamage;
+        public int getAmplifier() {
+            return amplifier;
         }
 
-        double getDefaultSpeed() {
-            return defaultSpeed;
-        }
-
-        int getCooldownTicks() {
-            return cooldownTicks;
-        }
-
-        int getMaxAmmo() {
-            return maxAmmo;
-        }
-    }
-
-    private static class WeaponStats {
-        private final double damage;
-        private final double speed;
-        private final int cooldownTicks;
-        private final int maxAmmo;
-
-        WeaponStats(double damage, double speed, int cooldownTicks, int maxAmmo) {
-            this.damage = damage;
-            this.speed = speed;
-            this.cooldownTicks = cooldownTicks;
-            this.maxAmmo = maxAmmo;
-        }
-
-        double getDamage() {
-            return damage;
-        }
-
-        double getSpeed() {
-            return speed;
-        }
-
-        int getCooldownTicks() {
-            return cooldownTicks;
-        }
-
-        int getMaxAmmo() {
-            return maxAmmo;
-        }
-    }
-
-    private static class MedkitSession {
-        private final int level;
-        private final float exp;
-        private final int totalExperience;
-
-        MedkitSession(int level, float exp, int totalExperience) {
-            this.level = level;
-            this.exp = exp;
-            this.totalExperience = totalExperience;
-        }
-
-        void applyProgress(Player player, int step) {
-            if (step <= 0) {
-                player.setLevel(0);
-                player.setExp(0.0F);
-                player.setTotalExperience(0);
-                return;
+        public ItemStack getItem(PlayerInventory inventory) {
+            switch (slot) {
+                case HEAD:
+                    return inventory.getHelmet();
+                case CHEST:
+                    return inventory.getChestplate();
+                case FEET:
+                    return inventory.getBoots();
+                default:
+                    return null;
             }
-            player.setLevel(step);
-            float progress = Math.min(1.0F, step / 10.0F);
-            player.setExp(progress);
-            player.setTotalExperience(step * 10);
-        }
-
-        void restore(Player player) {
-            player.setTotalExperience(totalExperience);
-            player.setLevel(level);
-            player.setExp(exp);
         }
     }
 }
