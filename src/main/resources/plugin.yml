@@ -5,8 +5,7 @@ api-version: 1.16
 author: Flouz1
 commands:
   flouz1:
-    description: Управление экипировкой танка и гаджетами LuckyDayz.
+    description: Танковые предметы и гаджеты LuckyDayz.
     usage: |-
-      /flouz1 com tank <helmet|chestplate|leggings|boots>
-      /flouz1 com luckydayz <machete|medkit|rpd|remington|helicopter>
-      /flouz1 com luckydayz helicopter speed <значение>
+      /flouz1 com tank <helmet|bodyarmor|lenghtarmor|boottarmor>
+      /flouz1 com luckydayz <obla|apteka>
