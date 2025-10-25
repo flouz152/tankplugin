@@ -1,7 +1,6 @@
 package net.flouz.tank;
 
 import com.destroystokyo.paper.event.player.PlayerArmorChangeEvent;
-import com.destroystokyo.paper.event.player.PlayerCriticalHitEvent;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.Material;
@@ -19,6 +18,7 @@ import org.bukkit.event.block.Action;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryCloseEvent;
 import org.bukkit.event.inventory.InventoryOpenEvent;
+import org.bukkit.event.entity.EntityDamageByEntityEvent;
 import org.bukkit.event.entity.EntityPickupItemEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.player.PlayerItemHeldEvent;
@@ -403,15 +403,52 @@ public class TankPlugin extends JavaPlugin implements Listener, CommandExecutor,
     }
 
     @EventHandler(ignoreCancelled = true)
-    public void onCriticalHit(PlayerCriticalHitEvent event) {
-        Player player = event.getPlayer();
+    public void onEntityDamage(EntityDamageByEntityEvent event) {
+        if (!(event.getDamager() instanceof Player)) {
+            return;
+        }
+
+        Player player = (Player) event.getDamager();
         if (!hasTankSwordInHand(player.getInventory())) {
             return;
         }
 
-        if (random.nextDouble() < 0.15d) {
-            event.setDamageMultiplier(event.getDamageMultiplier() * 2.0d);
+        if (!isCriticalHit(player)) {
+            return;
         }
+
+        if (random.nextDouble() < 0.15d) {
+            event.setDamage(event.getDamage() * 2.0d);
+        }
+    }
+
+    private boolean isCriticalHit(Player player) {
+        if (player.isOnGround()) {
+            return false;
+        }
+        if (player.getFallDistance() <= 0.0F) {
+            return false;
+        }
+        if (player.getVelocity().getY() >= 0.0D) {
+            return false;
+        }
+        if (player.isSprinting()) {
+            return false;
+        }
+        if (player.isInsideVehicle()) {
+            return false;
+        }
+        if (player.hasPotionEffect(PotionEffectType.BLINDNESS)) {
+            return false;
+        }
+        Material feetBlock = player.getLocation().getBlock().getType();
+        if (feetBlock == Material.LADDER || feetBlock == Material.VINE) {
+            return false;
+        }
+        if (player.getLocation().getBlock().isLiquid() || player.getEyeLocation().getBlock().isLiquid()) {
+            return false;
+        }
+        return true;
     }
 
     @Override
