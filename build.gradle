@@ -1,81 +1,93 @@
 buildscript {
-    def wrapperVersion = '4.10.3'
-    def wrapperDir = new File(System.getProperty('user.dir'), 'gradle/wrapper')
-    def wrapperJarFile = new File(wrapperDir, 'gradle-wrapper.jar')
-    if (!wrapperJarFile.exists()) {
-        wrapperDir.mkdirs()
-        def wrapperUrl = new URL("https://repo.gradle.org/gradle/libs-releases-local/org/gradle/gradle-wrapper/${wrapperVersion}/gradle-wrapper-${wrapperVersion}.jar")
-        println "Downloading Gradle wrapper JAR ${wrapperVersion}..."
-        try {
-            wrapperUrl.withInputStream { input ->
-                wrapperJarFile.withOutputStream { output ->
-                    output << input
-                }
-            }
-        } catch (Exception ex) {
-            throw new GradleException("Failed to download Gradle wrapper JAR from ${wrapperUrl}", ex)
-        }
-    }
     repositories {
-        maven { url = 'https://maven.minecraftforge.net' }
-        maven { url = 'https://repo.spongepowered.org/maven' }
-        jcenter()
+        maven { url = 'https://maven.minecraftforge.net/' }
         mavenCentral()
     }
     dependencies {
-        classpath 'net.minecraftforge.gradle:ForgeGradle:2.3-SNAPSHOT'
+        classpath 'net.minecraftforge.gradle:ForgeGradle:3.+'
     }
 }
 
-apply plugin: 'net.minecraftforge.gradle.forge'
+apply plugin: 'net.minecraftforge.gradle'
+apply plugin: 'eclipse'
+apply plugin: 'maven-publish'
 
 version = '1.0.0'
-group = 'net.flouz.tankmod'
-archivesBaseName = 'tankmod'
+group = 'net.flouz.nodamageanimation'
+archivesBaseName = 'nodamageanimation'
 
-targetCompatibility = sourceCompatibility = 1.8
+sourceCompatibility = targetCompatibility = compileJava.sourceCompatibility = compileJava.targetCompatibility = '1.8'
 
 minecraft {
-    version = '1.12.2-14.23.5.2859'
-    runDir = 'run'
-    mappings = 'stable_39'
-}
+    mappings channel: 'snapshot', version: '20171003-1.12'
 
-repositories {
-    maven { url = 'https://maven.minecraftforge.net' }
-    maven { url = 'https://libraries.minecraft.net/' }
-    maven { url = 'https://repo.spongepowered.org/maven' }
-    jcenter()
-    mavenCentral()
+    runs {
+        client {
+            workingDirectory project.file('run')
+            property 'forge.logging.markers', 'SCAN,REGISTRIES,REGISTRYDUMP'
+            property 'forge.logging.console.level', 'debug'
+        }
+
+        server {
+            workingDirectory project.file('run')
+            property 'forge.logging.markers', 'SCAN,REGISTRIES,REGISTRYDUMP'
+            property 'forge.logging.console.level', 'debug'
+        }
+    }
 }
 
 dependencies {
+    minecraft 'net.minecraftforge:forge:1.12.2-14.23.5.2859'
 }
 
-def resourceTargets = ['mcmod.info']
-def replaceProperties = [
-        modid      : 'tankmod',
-        name       : 'NoDamageAnimation',
-        description: 'Убирает анимацию урона.',
-        version    : project.version
-]
-
 processResources {
-    inputs.properties replaceProperties
-    filesMatching(resourceTargets) {
-        expand replaceProperties
+    inputs.property 'version', project.version
+    inputs.property 'mcversion', '1.12.2'
+    inputs.property 'modid', 'nodamageanimation'
+    inputs.property 'name', 'NoDamageAnimation'
+    inputs.property 'description', 'Убирает анимацию урона.'
+
+    from(sourceSets.main.resources.srcDirs) {
+        include 'mcmod.info'
+        expand([
+            version    : project.version,
+            mcversion  : '1.12.2',
+            modid      : 'nodamageanimation',
+            name       : 'NoDamageAnimation',
+            description: 'Убирает анимацию урона.'
+        ])
+    }
+
+    from(sourceSets.main.resources.srcDirs) {
+        exclude 'mcmod.info'
     }
 }
 
 jar {
     manifest {
-        attributes(
-                'Specification-Title'    : 'tankmod',
-                'Specification-Version'  : project.version,
-                'Specification-Vendor'   : 'Flouz',
-                'Implementation-Title'   : project.name,
-                'Implementation-Version' : project.version,
-                'Implementation-Vendor'  : 'Flouz'
-        )
+        attributes([
+            'Specification-Title'     : 'NoDamageAnimation',
+            'Specification-Vendor'    : 'Flouz',
+            'Specification-Version'   : project.version,
+            'Implementation-Title'    : project.name,
+            'Implementation-Version'  : project.version,
+            'Implementation-Vendor'   : 'Flouz',
+            'Implementation-Timestamp': new Date().format("yyyy-MM-dd'T'HH:mm:ssZ")
+        ])
+    }
+}
+
+jar.finalizedBy('reobfJar')
+
+publishing {
+    publications {
+        mavenJava(MavenPublication) {
+            artifact jar
+        }
+    }
+    repositories {
+        maven {
+            url "file:///${project.projectDir}/mcmodsrepo"
+        }
     }
 }
