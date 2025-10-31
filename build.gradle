@@ -1,9 +1,6 @@
 import org.gradle.util.GradleVersion
 
 def requiredGradle = GradleVersion.version('4.9')
-if (GradleVersion.current() != requiredGradle) {
-    throw new GradleException("NoDamageAnimation must be built with Gradle ${requiredGradle.version}. Use the bundled ./gradlew script (which will download the correct version automatically).")
-}
 
 def wrapperJar = file('gradle/wrapper/gradle-wrapper.jar')
 if (!wrapperJar.exists()) {
@@ -17,6 +14,10 @@ if (!wrapperJar.exists()) {
     } catch (Exception ex) {
         throw new GradleException("Failed to download gradle-wrapper.jar from ${wrapperUrl}. Please download it manually and place it in ${wrapperJar}.", ex)
     }
+}
+
+if (GradleVersion.current() != requiredGradle) {
+    throw new GradleException("NoDamageAnimation must be built with Gradle ${requiredGradle.version}. Use the bundled ./gradlew script (which will download the correct version automatically).")
 }
 
 buildscript {
@@ -40,7 +41,7 @@ archivesBaseName = 'nodamageanimation'
 sourceCompatibility = targetCompatibility = compileJava.sourceCompatibility = compileJava.targetCompatibility = '1.8'
 
 minecraft {
-    mappings channel: 'snapshot', version: '20171003-1.12'
+    mappings channel: 'stable', version: '39-1.12'
 
     runs {
         client {
@@ -55,6 +56,12 @@ minecraft {
             property 'forge.logging.console.level', 'debug'
         }
     }
+}
+
+repositories {
+    maven { url = 'https://maven.minecraftforge.net/' }
+    maven { url = 'https://repo.spongepowered.org/maven' }
+    mavenCentral()
 }
 
 dependencies {

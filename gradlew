@@ -102,6 +102,19 @@ die () {
     exit 1
 } >&2
 
+WRAPPER_JAR="$APP_HOME/gradle/wrapper/gradle-wrapper.jar"
+WRAPPER_URL="https://repo.gradle.org/gradle/libs-releases-local/org/gradle/gradle-wrapper/4.9/gradle-wrapper-4.9.jar"
+if [ ! -f "$WRAPPER_JAR" ]; then
+    mkdir -p "${WRAPPER_JAR%/*}"
+    if command -v curl >/dev/null 2>&1; then
+        curl -fsSL "$WRAPPER_URL" -o "$WRAPPER_JAR" || die "Failed to download gradle-wrapper.jar from $WRAPPER_URL"
+    elif command -v wget >/dev/null 2>&1; then
+        wget -q -O "$WRAPPER_JAR" "$WRAPPER_URL" || die "Failed to download gradle-wrapper.jar from $WRAPPER_URL"
+    else
+        die "Unable to download gradle-wrapper.jar: please install curl or wget"
+    fi
+fi
+
 # OS specific support (must be 'true' or 'false').
 cygwin=false
 msys=false

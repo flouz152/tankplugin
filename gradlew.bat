@@ -35,6 +35,19 @@ set APP_HOME=%DIRNAME%
 @rem Resolve any "." and ".." in APP_HOME to make it shorter.
 for %%i in ("%APP_HOME%") do set APP_HOME=%%~fi
 
+set WRAPPER_JAR=%APP_HOME%\gradle\wrapper\gradle-wrapper.jar
+set WRAPPER_URL=https://repo.gradle.org/gradle/libs-releases-local/org/gradle/gradle-wrapper/4.9/gradle-wrapper-4.9.jar
+if not exist "%WRAPPER_JAR%" (
+    if exist "%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe" (
+        powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command "Try { New-Item -ItemType Directory -Force -Path (Split-Path '%WRAPPER_JAR%') | Out-Null; (New-Object System.Net.WebClient).DownloadFile('%WRAPPER_URL%', '%WRAPPER_JAR%') } Catch { exit 1 }" || goto fail
+    ) else (
+        echo Unable to download gradle-wrapper.jar automatically. Please install PowerShell or download it manually.&goto fail
+    )
+    if not exist "%WRAPPER_JAR%" (
+        echo Failed to download gradle-wrapper.jar from %WRAPPER_URL%.&goto fail
+    )
+)
+
 @rem Add default JVM options here. You can also use JAVA_OPTS and GRADLE_OPTS to pass JVM options to this script.
 set DEFAULT_JVM_OPTS="-Xmx64m" "-Xms64m"
 
