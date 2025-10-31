@@ -1,3 +1,24 @@
+import org.gradle.util.GradleVersion
+
+def requiredGradle = GradleVersion.version('4.9')
+if (GradleVersion.current() != requiredGradle) {
+    throw new GradleException("NoDamageAnimation must be built with Gradle ${requiredGradle.version}. Use the bundled ./gradlew script (which will download the correct version automatically).")
+}
+
+def wrapperJar = file('gradle/wrapper/gradle-wrapper.jar')
+if (!wrapperJar.exists()) {
+    def wrapperUrl = 'https://repo.gradle.org/gradle/libs-releases-local/org/gradle/gradle-wrapper/4.9/gradle-wrapper-4.9.jar'
+    try {
+        wrapperJar.parentFile.mkdirs()
+        new URL(wrapperUrl).withInputStream { input ->
+            java.nio.file.Files.copy(input, wrapperJar.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING)
+        }
+        logger.lifecycle("Downloaded Gradle wrapper jar from ${wrapperUrl}")
+    } catch (Exception ex) {
+        throw new GradleException("Failed to download gradle-wrapper.jar from ${wrapperUrl}. Please download it manually and place it in ${wrapperJar}.", ex)
+    }
+}
+
 buildscript {
     repositories {
         maven { url = 'https://maven.minecraftforge.net/' }
