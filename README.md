@@ -1,4 +1,4 @@
-# Tank Mod
+# NoDamageAnimation
 
 Forge 1.12.2 client-side utility mod that instantly toggles the inventory screen on any incoming damage and auto-issues `/ext` whenever the player catches fire.
 

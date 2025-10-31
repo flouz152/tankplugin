@@ -28,8 +28,8 @@ dependencies {
 def resourceTargets = ['mcmod.info']
 def replaceProperties = [
         modid      : 'tankmod',
-        name       : 'Tank Mod',
-        description: 'Inventory toggle and auto-extinguish utilities',
+        name       : 'NoDamageAnimation',
+        description: 'Убирает анимацию урона.',
         version    : project.version
 ]
 
