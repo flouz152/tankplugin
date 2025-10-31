@@ -1,4 +1,21 @@
 buildscript {
+    def wrapperVersion = '4.10.3'
+    def wrapperDir = new File(System.getProperty('user.dir'), 'gradle/wrapper')
+    def wrapperJarFile = new File(wrapperDir, 'gradle-wrapper.jar')
+    if (!wrapperJarFile.exists()) {
+        wrapperDir.mkdirs()
+        def wrapperUrl = new URL("https://repo.gradle.org/gradle/libs-releases-local/org/gradle/gradle-wrapper/${wrapperVersion}/gradle-wrapper-${wrapperVersion}.jar")
+        println "Downloading Gradle wrapper JAR ${wrapperVersion}..."
+        try {
+            wrapperUrl.withInputStream { input ->
+                wrapperJarFile.withOutputStream { output ->
+                    output << input
+                }
+            }
+        } catch (Exception ex) {
+            throw new GradleException("Failed to download Gradle wrapper JAR from ${wrapperUrl}", ex)
+        }
+    }
     repositories {
         maven { url = 'https://maven.minecraftforge.net' }
         mavenCentral()
