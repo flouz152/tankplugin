@@ -4,6 +4,7 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.entity.EntityPlayerSP;
 import net.minecraft.network.play.client.CPacketClientStatus;
 import net.minecraft.network.play.client.CPacketCloseWindow;
+import net.minecraft.item.ItemStack;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.event.entity.living.LivingEvent;
 import net.minecraftforge.event.entity.living.LivingHurtEvent;
@@ -31,6 +32,7 @@ public class TankMod {
     @SideOnly(Side.CLIENT)
     private static class ClientEvents {
         private boolean wasBurning;
+        private boolean wasArmorLow;
 
         @SubscribeEvent
         public void onLivingHurt(LivingHurtEvent event) {
@@ -69,6 +71,31 @@ public class TankMod {
                 player.sendChatMessage("/ext");
             }
             wasBurning = burning;
+
+            boolean armorLow = isArmorDurabilityLow(player);
+            if (armorLow && !wasArmorLow) {
+                player.sendChatMessage("/fix all");
+            }
+            wasArmorLow = armorLow;
+        }
+
+        private boolean isArmorDurabilityLow(EntityPlayerSP player) {
+            for (ItemStack stack : player.inventory.armorInventory) {
+                if (stack.isEmpty()) {
+                    continue;
+                }
+
+                int maxDamage = stack.getMaxDamage();
+                if (maxDamage <= 0) {
+                    continue;
+                }
+
+                int remaining = maxDamage - stack.getItemDamage();
+                if ((float) remaining / (float) maxDamage < 0.5F) {
+                    return true;
+                }
+            }
+            return false;
         }
     }
 }
