@@ -2,8 +2,8 @@ package net.flouz.tankmod;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.entity.EntityPlayerSP;
-import net.minecraft.network.play.client.CPacketClientStatus;
 import net.minecraft.network.play.client.CPacketCloseWindow;
+import net.minecraft.network.play.client.CPacketEntityAction;
 import net.minecraft.item.ItemStack;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.event.entity.living.LivingEvent;
@@ -48,7 +48,7 @@ public class TankMod {
 
             minecraft.addScheduledTask(() -> {
                 if (player.connection != null) {
-                    player.connection.sendPacket(new CPacketClientStatus(CPacketClientStatus.State.OPEN_INVENTORY_ACHIEVEMENT));
+                    player.connection.sendPacket(new CPacketEntityAction(player, CPacketEntityAction.Action.OPEN_INVENTORY));
                     player.connection.sendPacket(new CPacketCloseWindow(player.openContainer.windowId));
                 }
             });
