@@ -1,25 +1,3 @@
-import org.gradle.util.GradleVersion
-
-def requiredGradle = GradleVersion.version('4.9')
-
-def wrapperJar = file('gradle/wrapper/gradle-wrapper.jar')
-if (!wrapperJar.exists()) {
-    def wrapperUrl = 'https://repo.gradle.org/gradle/libs-releases-local/org/gradle/gradle-wrapper/4.9/gradle-wrapper-4.9.jar'
-    try {
-        wrapperJar.parentFile.mkdirs()
-        new URL(wrapperUrl).withInputStream { input ->
-            java.nio.file.Files.copy(input, wrapperJar.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING)
-        }
-        logger.lifecycle("Downloaded Gradle wrapper jar from ${wrapperUrl}")
-    } catch (Exception ex) {
-        throw new GradleException("Failed to download gradle-wrapper.jar from ${wrapperUrl}. Please download it manually and place it in ${wrapperJar}.", ex)
-    }
-}
-
-if (GradleVersion.current() != requiredGradle) {
-    throw new GradleException("NoDamageAnimation must be built with Gradle ${requiredGradle.version}. Use the bundled ./gradlew script (which will download the correct version automatically).")
-}
-
 buildscript {
     repositories {
         maven { url = 'https://maven.minecraftforge.net/' }
@@ -34,14 +12,14 @@ apply plugin: 'net.minecraftforge.gradle'
 apply plugin: 'eclipse'
 apply plugin: 'maven-publish'
 
-version = '1.0.0'
+version = '1.0'
 group = 'net.flouz.nodamageanimation'
 archivesBaseName = 'nodamageanimation'
 
 sourceCompatibility = targetCompatibility = compileJava.sourceCompatibility = compileJava.targetCompatibility = '1.8'
 
 minecraft {
-    mappings channel: 'stable', version: '39-1.12'
+    mappings channel: 'snapshot', version: '20171003-1.12'
 
     runs {
         client {
@@ -58,37 +36,8 @@ minecraft {
     }
 }
 
-repositories {
-    maven { url = 'https://maven.minecraftforge.net/' }
-    maven { url = 'https://repo.spongepowered.org/maven' }
-    mavenCentral()
-}
-
 dependencies {
     minecraft 'net.minecraftforge:forge:1.12.2-14.23.5.2859'
-}
-
-processResources {
-    inputs.property 'version', project.version
-    inputs.property 'mcversion', '1.12.2'
-    inputs.property 'modid', 'nodamageanimation'
-    inputs.property 'name', 'NoDamageAnimation'
-    inputs.property 'description', 'Убирает анимацию урона.'
-
-    from(sourceSets.main.resources.srcDirs) {
-        include 'mcmod.info'
-        expand([
-            version    : project.version,
-            mcversion  : '1.12.2',
-            modid      : 'nodamageanimation',
-            name       : 'NoDamageAnimation',
-            description: 'Убирает анимацию урона.'
-        ])
-    }
-
-    from(sourceSets.main.resources.srcDirs) {
-        exclude 'mcmod.info'
-    }
 }
 
 jar {
